@@ -1,4 +1,4 @@
-package com.fcnami.backend.Model;
+package com.fcnami.backend.Model.SongTags;
 
 public enum SongStatus {
     IDEA,
