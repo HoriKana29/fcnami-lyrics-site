@@ -34,7 +34,9 @@ public class User {
 
     private String email; // optional
 
+    @Builder.Default
     private Integer totalRequests = 0;
+    @Builder.Default
     private Integer activeRequests = 0;
 
     // Request's Bond

@@ -36,7 +36,7 @@ public class QueueSnapshot {
     private QueueType queueType;
 
     @Column(nullable = false)
-    private Integer position;
+    private Integer position = 0;
 
     // group snapshot
     @Column(nullable = false)

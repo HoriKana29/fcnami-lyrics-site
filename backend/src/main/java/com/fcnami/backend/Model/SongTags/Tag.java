@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.HashSet;
 import java.util.Set;
 
 @Entity
@@ -32,5 +33,5 @@ public class Tag {
     private TagType type;
 
     @ManyToMany(mappedBy = "tags",fetch = FetchType.LAZY)
-    private Set<Song> songs;
+    private Set<Song> songs = new HashSet<>();
 }
