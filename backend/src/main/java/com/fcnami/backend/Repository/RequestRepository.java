@@ -63,4 +63,12 @@ public interface RequestRepository extends JpaRepository<Request,Long> {
         AND r.requestOrder > :order
     """)
     int decrementOrderAfter(QueueType queueType, int order);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+    SELECT r FROM Request r
+    WHERE r.queueType = :queueType
+    ORDER BY r.requestOrder ASC
+""")
+    List<Request> findQueueForUpdate(QueueType queueType);
 }

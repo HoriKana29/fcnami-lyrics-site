@@ -312,4 +312,32 @@ class RequestRepositoryTest {
         assertEquals(2, updated);
     }
 
+    @Test
+    void shouldFindQueueForUpdateOrderedAsc() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 3));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 2));
+
+        List<Request> result =
+                requestRepository.findQueueForUpdate(QueueType.MAIN);
+
+        assertEquals(3, result.size());
+        assertEquals(1, result.get(0).getRequestOrder());
+        assertEquals(2, result.get(1).getRequestOrder());
+        assertEquals(3, result.get(2).getRequestOrder());
+    }
+
+    @Test
+    void shouldStillReturnDataWithPessimisticLock() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        requestRepository.save(TestFactory.createRequest(user));
+
+        List<Request> result =
+                requestRepository.findQueueForUpdate(QueueType.MAIN);
+
+        assertFalse(result.isEmpty());
+    }
 }
