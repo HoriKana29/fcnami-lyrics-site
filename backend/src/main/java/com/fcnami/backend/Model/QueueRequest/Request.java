@@ -17,7 +17,12 @@ import java.util.Set;
 @Table(name = "requests",
         indexes = {
                 @Index(name = "idx_queue_order", columnList = "queueType, requestOrder"),
-                @Index(name = "idx_requester", columnList = "requesterId")
+                @Index(name = "idx_requester", columnList = "requesterId"),
+                @Index(name = "idx_normalized_key", columnList = "normalizedKey"),
+                @Index(name = "idx_status", columnList = "status"),
+                @Index(name = "idx_depth", columnList = "depthLevel"),
+                @Index(name = "idx_replaced", columnList = "replaced_request_id"),
+                @Index(name = "idx_user", columnList = "user_id")
         })
 public class Request {
 
@@ -47,7 +52,7 @@ public class Request {
     private Song song;
 
     // กันซ้ำ
-    @Column(nullable = false)
+    @Column(nullable = false,unique = true)
     private String normalizedKey;
 
     // Request's Status
@@ -57,6 +62,7 @@ public class Request {
 
     // Queue Type
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private QueueType queueType;
     private Integer depthLevel;
 

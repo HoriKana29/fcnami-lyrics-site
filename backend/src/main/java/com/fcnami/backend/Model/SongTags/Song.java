@@ -17,7 +17,9 @@ import java.util.Set;
 @Table(name = "songs",
         indexes = {
                 @Index(name = "idx_song_title", columnList = "title"),
-                @Index(name = "idx_song_artist", columnList = "artist")
+                @Index(name = "idx_song_artist", columnList = "artist"),
+                @Index(name = "idx_song_normalized", columnList = "normalizedKey"),
+                @Index(name = "idx_song_status", columnList = "status")
         }
 )
 public class Song {
@@ -29,7 +31,7 @@ public class Song {
     private String title;
     @Column(nullable = false)
     private String artist;
-    @Column(unique = true)
+    @Column(nullable = false,unique = true)
     private String normalizedKey;
 
     @Column(columnDefinition = "TEXT")

@@ -15,7 +15,9 @@ import java.time.LocalDateTime;
         indexes = {
                 @Index(name = "idx_snapshot_batch", columnList = "batchId"),
                 @Index(name = "idx_snapshot_request", columnList = "request_id"),
-                @Index(name = "idx_snapshot_time", columnList = "snapshotTime")
+                @Index(name = "idx_snapshot_time", columnList = "snapshotTime"),
+                @Index(name = "idx_batch_time", columnList = "batchId, snapshotTime"),
+                @Index(name = "idx_batch_queue", columnList = "batchId, queueType")
         })
 public class QueueSnapshot {
 
@@ -30,8 +32,10 @@ public class QueueSnapshot {
 
     // snapshot value
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private QueueType queueType;
 
+    @Column(nullable = false)
     private Integer position;
 
     // group snapshot
