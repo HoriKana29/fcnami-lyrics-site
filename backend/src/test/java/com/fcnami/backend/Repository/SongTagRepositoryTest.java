@@ -3,6 +3,7 @@ package com.fcnami.backend.Repository;
 import com.fcnami.backend.Model.SongTags.Song;
 import com.fcnami.backend.Model.SongTags.SongStatus;
 import com.fcnami.backend.Model.SongTags.Tag;
+import com.fcnami.backend.Model.SongTags.TagType;
 import com.fcnami.backend.TestFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -283,4 +284,171 @@ class SongTagRepositoryTest {
 
         assertNotNull(song.getId());
     }
+    @Test
+    void shouldFindByNormalizedName() {
+
+        Tag tag = tagRepository.save(
+                TestFactory.createTag("Rock Music", TagType.GENRE)
+        );
+
+        Optional<Tag> result =
+                tagRepository.findByNormalizedName(tag.getNormalizedName());
+
+        assertTrue(result.isPresent());
+        assertEquals(tag.getNormalizedName(), result.get().getNormalizedName());
+    }
+
+    // =========================
+    // EXISTS CHECK
+    // =========================
+
+    @Test
+    void shouldCheckExistsByNormalizedName() {
+
+        Tag tag = tagRepository.save(
+                TestFactory.createTag("Anime", TagType.GENRE)
+        );
+
+        assertTrue(tagRepository.existsByNormalizedName(tag.getNormalizedName()));
+    }
+
+    // =========================
+    // FILTER BY TYPE
+    // =========================
+
+    @Test
+    void shouldFindByType() {
+
+        tagRepository.save(TestFactory.createTag("Rock", TagType.GENRE));
+        tagRepository.save(TestFactory.createTag("Sad", TagType.MOOD));
+        tagRepository.save(TestFactory.createTag("Happy", TagType.MOOD));
+
+        List<Tag> result =
+                tagRepository.findByType(TagType.MOOD);
+
+        assertEquals(2, result.size());
+        assertTrue(result.stream().allMatch(t -> t.getType() == TagType.MOOD));
+    }
+
+    // =========================
+    // SEARCH BY NAME (LIKE)
+    // =========================
+
+    @Test
+    void shouldFindByNameContainingIgnoreCase() {
+
+        tagRepository.save(TestFactory.createTag("Japanese Rock", TagType.GENRE));
+        tagRepository.save(TestFactory.createTag("Thai Pop", TagType.GENRE));
+
+        List<Tag> result =
+                tagRepository.findByNameContainingIgnoreCase("rock");
+
+        assertEquals(1, result.size());
+        assertEquals("Japanese Rock", result.getFirst().getName());
+    }
+
+    // =========================
+    // EMPTY CASE
+    // =========================
+
+    @Test
+    void shouldReturnEmptyWhenNotFound() {
+
+        Optional<Tag> result =
+                tagRepository.findByNormalizedName("not_exist");
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void shouldFindByTitleOrArtist() {
+
+        songRepository.save(
+                TestFactory.createSongWithTitleAndArtist("Hello World", "Adele")
+        );
+
+        songRepository.save(
+                TestFactory.createSongWithTitleAndArtist("Random Song", "Hello Artist")
+        );
+
+        songRepository.save(
+                TestFactory.createSongWithTitleAndArtist("No Match", "Nobody")
+        );
+
+        List<Song> result =
+                songRepository.findByTitleContainingIgnoreCaseOrArtistContainingIgnoreCase(
+                        "hello",
+                        "hello"
+                );
+
+        assertEquals(2, result.size());
+    }
+    @Test
+    void shouldFindByStatusAndArtist() {
+
+        songRepository.save(
+                TestFactory.createSongWithTitleAndStatus("Song1", SongStatus.IDEA)
+        );
+        songRepository.save(
+                TestFactory.createSongWithTitleAndStatus("Song2", SongStatus.READY_TO_UPLOAD)
+        );
+
+        List<Song> result =
+                songRepository.findByStatusAndArtistContainingIgnoreCase(
+                        SongStatus.IDEA,
+                        "artist"
+                );
+
+        assertEquals(1, result.size());
+        assertEquals(SongStatus.IDEA, result.getFirst().getStatus());
+    }
+    @Test
+    void shouldPageByArtist() {
+
+        for (int i = 0; i < 15; i++) {
+            songRepository.save(
+                    TestFactory.createSongWithTitleAndArtist("Song " + i, "Artist")
+            );
+        }
+
+        Page<Song> page =
+                songRepository.findByArtistContainingIgnoreCase(
+                        "artist",
+                        org.springframework.data.domain.PageRequest.of(0, 10)
+                );
+
+        assertEquals(10, page.getContent().size());
+        assertEquals(15, page.getTotalElements());
+    }
+    @Test
+    void shouldPageByStatus() {
+
+        for (int i = 0; i < 12; i++) {
+            songRepository.save(
+                    TestFactory.createSongWithTitleAndStatus(
+                            "Song " + i,
+                            SongStatus.IDEA
+                    )
+            );
+        }
+
+        for (int i = 0; i < 5; i++) {
+            songRepository.save(
+                    TestFactory.createSongWithTitleAndStatus(
+                            "Song X " + i,
+                            SongStatus.READY_TO_UPLOAD
+                    )
+            );
+        }
+
+        Page<Song> page =
+                songRepository.findByStatus(
+                        SongStatus.IDEA,
+                        org.springframework.data.domain.PageRequest.of(0, 10)
+                );
+
+        assertEquals(10, page.getContent().size());
+        assertEquals(12, page.getTotalElements());
+    }
+
 }

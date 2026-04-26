@@ -120,7 +120,7 @@ public class TestFactory {
         song.setNormalizedKey(title + "_" + artist);
         song.setStatus(SongStatus.IDEA);
 
-        song.setTags(createTags(2));
+        song.setTags(new HashSet<>());
 
         return song;
     }
@@ -181,6 +181,16 @@ public class TestFactory {
         song.setStatus(SongStatus.IDEA);
         song.setTags(null);
         return song;
+    }
+
+    public static Tag createTag(String name, TagType type) {
+        Tag tag = new Tag();
+
+        tag.setName(name);
+        tag.setNormalizedName(name.toLowerCase().replace(" ", "_"));
+        tag.setType(type);
+
+        return tag;
     }
 
     public static QueueSnapshot createSnapshot(Request request, QueueType type, int position) {

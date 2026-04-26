@@ -2,6 +2,7 @@ package com.fcnami.backend.Repository;
 
 import com.fcnami.backend.Model.QueueRequest.QueueType;
 import com.fcnami.backend.Model.QueueRequest.Request;
+import com.fcnami.backend.Model.QueueRequest.RequestStatus;
 import com.fcnami.backend.Model.User;
 import com.fcnami.backend.TestFactory;
 import org.junit.jupiter.api.DisplayName;
@@ -9,12 +10,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Transactional
 @DataJpaTest
 class RequestRepositoryTest {
     @Autowired
@@ -195,6 +198,118 @@ class RequestRepositoryTest {
                 requestRepository.findByReplacedRequest_Id(original.getId());
 
         assertEquals(1, list.size());
+    }
+
+    @Test
+    void shouldFindByRequesterId() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        Request r1 = TestFactory.createRequest(user);
+        Request r2 = TestFactory.createRequest(user);
+
+        r1.setRequesterId("req-1");
+        r2.setRequesterId("req-2");
+
+        requestRepository.save(r1);
+        requestRepository.save(r2);
+
+        List<Request> result = requestRepository.findByRequesterId("req-1");
+
+        assertEquals(1, result.size());
+        assertEquals("req-1", result.getFirst().getRequesterId());
+    }
+    @Test
+    void shouldFindByQueueTypeAndStatusOrdered() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        Request r1 = TestFactory.createRequest(user, QueueType.MAIN, 2);
+        Request r2 = TestFactory.createRequest(user, QueueType.MAIN, 1);
+
+        r1.setStatus(RequestStatus.WAITING);
+        r2.setStatus(RequestStatus.WAITING);
+
+        requestRepository.save(r1);
+        requestRepository.save(r2);
+
+        List<Request> result =
+                requestRepository.findByQueueTypeAndStatusOrderByRequestOrderAsc(
+                        QueueType.MAIN,
+                        RequestStatus.WAITING
+                );
+
+        assertEquals(1, result.get(0).getRequestOrder());
+        assertEquals(2, result.get(1).getRequestOrder());
+    }
+    @Test
+    void shouldFindTopForUpdate() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 5));
+
+        List<Request> result = requestRepository.findTopForUpdate(QueueType.MAIN);
+
+        assertFalse(result.isEmpty());
+        assertEquals(5, result.get(0).getRequestOrder());
+    }
+    @Test
+    void shouldFindByDepthLevel() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        Request r1 = TestFactory.createRequest(user);
+        Request r2 = TestFactory.createRequest(user);
+
+        r1.setDepthLevel(1);
+        r2.setDepthLevel(2);
+
+        requestRepository.save(r1);
+        requestRepository.save(r2);
+
+        List<Request> result = requestRepository.findByDepthLevel(1);
+
+        assertEquals(1, result.size());
+        assertEquals(1, result.getFirst().getDepthLevel());
+    }
+    @Test
+    void shouldFindByStatus() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        Request r1 = TestFactory.createRequest(user);
+        Request r2 = TestFactory.createRequest(user);
+
+        r1.setStatus(RequestStatus.WAITING);
+        r2.setStatus(RequestStatus.DONE);
+
+        requestRepository.save(r1);
+        requestRepository.save(r2);
+
+        List<Request> result = requestRepository.findByStatus(RequestStatus.WAITING);
+
+        assertEquals(1, result.size());
+        assertEquals(RequestStatus.WAITING, result.getFirst().getStatus());
+    }
+    @Test
+    void shouldIncrementOrderForQueue() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 2));
+
+        int updated = requestRepository.incrementOrderForQueue(QueueType.MAIN);
+
+        assertEquals(2, updated);
+    }
+    @Test
+    void shouldDecrementOrderAfter() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 2));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 3));
+
+        int updated = requestRepository.decrementOrderAfter(QueueType.MAIN, 1);
+
+        assertEquals(2, updated);
     }
 
 }

@@ -215,4 +215,29 @@ class QueueSnapshotRepositoryTest {
         assertTrue(result.isEmpty());
     }
 
+    @Test
+    void shouldReturnLatestSnapshotByBatchId() throws InterruptedException {
+        User user = userRepository.save(TestFactory.createUser());
+        Request request = requestRepository.save(TestFactory.createRequest(user));
+
+        String batchId = TestFactory.createBatchId();
+
+        QueueSnapshot s1 = snapshotRepository.save(
+                TestFactory.createSnapshot(request, QueueType.MAIN, 1, batchId)
+        );
+
+        Thread.sleep(10);
+
+        QueueSnapshot s2 = snapshotRepository.save(
+                TestFactory.createSnapshot(request, QueueType.MAIN, 2, batchId)
+        );
+
+        Optional<QueueSnapshot> result =
+                snapshotRepository.findTopByBatchIdOrderBySnapshotTimeDesc(batchId);
+
+        assertTrue(result.isPresent());
+
+        // ต้องได้ตัวล่าสุด (s2)
+        assertEquals(s2.getId(), result.get().getId());
+    }
 }
