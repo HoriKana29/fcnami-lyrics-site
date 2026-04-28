@@ -9,6 +9,7 @@ import com.fcnami.backend.Repository.RequestRepository;
 import com.fcnami.backend.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -20,40 +21,51 @@ public class RequestService {
     private final RequestRepository requestRepository;
     private final UserRepository userRepository;
 
-    @Transactional
-    public Request createRequest(Long userId, String title, String artist, QueueType type) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Request createRequestInternal(Long userId, String title, String artist, QueueType type) {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Factory create
+        // 🔒 LOCK ทั้ง queue ก่อน
+        requestRepository.findQueueForUpdate(type);
+
         Request request = RequestFactory.create(user, title, artist, type);
 
-        // duplicate check
-        if (requestRepository.existsByNormalizedKey(request.getNormalizedKey())) {
-            throw new IllegalStateException("Duplicate request");
-        }
+        Integer maxOrder = requestRepository.findMaxOrder(type);
+        int nextOrder = (maxOrder == null ? 1 : maxOrder + 1);
 
-        List<Request> lockedQueue = requestRepository.findQueueForUpdate(type);
-
-        int maxOrder = lockedQueue.stream()
-                .mapToInt(r -> r.getRequestOrder() == null ? 0 : r.getRequestOrder())
-                .max()
-                .orElse(0);
-
-        request.setRequestOrder(maxOrder + 1);
+        request.setRequestOrder(nextOrder);
 
         Request saved = requestRepository.save(request);
 
-        // update user stats
-        user.setActiveRequests(
-                user.getActiveRequests() == null ? 1 : user.getActiveRequests() + 1
-        );
+        user.setActiveRequests(safeIncrement(user.getActiveRequests()));
         userRepository.save(user);
 
         return saved;
     }
 
+    public Request createRequest(Long userId, String title, String artist, QueueType type) {
+
+        int retry = 0;
+
+        while (true) {
+            try {
+                return createRequestInternal(userId, title, artist, type);
+
+            } catch (org.springframework.dao.DataIntegrityViolationException |
+                     org.springframework.dao.CannotAcquireLockException e) {
+
+                if (++retry > 5) {
+                    throw e;
+                }
+
+                try {
+                    Thread.sleep(50); // backoff กันชน
+                } catch (InterruptedException ignored) {}
+            }
+        }
+    }
 
     public List<Request> getQueue(QueueType type) {
         return requestRepository.findByQueueTypeOrderByRequestOrderAsc(type);
@@ -72,15 +84,18 @@ public class RequestService {
         QueueType type = request.getQueueType();
         int order = request.getRequestOrder();
 
-        requestRepository.delete(request);
+        User user = request.getUser();
 
+        if (user != null && user.getRequests() != null) {
+            user.getRequests().remove(request);
+        }
+
+        requestRepository.delete(request);
+        requestRepository.flush(); // ensure delete before bulk
         requestRepository.decrementOrderAfter(type, order);
 
-        User user = request.getUser();
         if (user != null) {
-            user.setActiveRequests(
-                    Math.max(0, user.getActiveRequests() - 1)
-            );
+            user.setActiveRequests(safeDecrement(user.getActiveRequests()));
             userRepository.save(user);
         }
     }
@@ -101,9 +116,7 @@ public class RequestService {
 
         Request saved = requestRepository.save(request);
 
-        user.setActiveRequests(
-                user.getActiveRequests() == null ? 1 : user.getActiveRequests() + 1
-        );
+        user.setActiveRequests(safeIncrement(user.getActiveRequests()));
         userRepository.save(user);
 
         return saved;
@@ -115,6 +128,14 @@ public class RequestService {
         Request original = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Original request not found"));
 
+        // lock queue
+        requestRepository.findQueueForUpdate(original.getQueueType());
+
+        int insertOrder = original.getRequestOrder() + 1;
+
+        // shift
+        requestRepository.incrementAfter(original.getQueueType(), original.getRequestOrder());
+
         Request newRequest = RequestFactory.replace(
                 original.getUser(),
                 original,
@@ -123,14 +144,10 @@ public class RequestService {
         );
 
         newRequest.setQueueType(original.getQueueType());
-
         newRequest.setDepthLevel(
                 original.getDepthLevel() == null ? 1 : original.getDepthLevel() + 1
         );
-
-        newRequest.setRequestOrder(original.getRequestOrder() + 1);
-
-        requestRepository.incrementOrderForQueue(original.getQueueType());
+        newRequest.setRequestOrder(insertOrder);
 
         return requestRepository.save(newRequest);
     }
@@ -144,17 +161,20 @@ public class RequestService {
 
         Request next = queue.getFirst();
 
-        requestRepository.delete(next);
-
-        requestRepository.decrementOrderAfter(type, next.getRequestOrder());
-
+        //  ดึงค่าที่ต้องใช้ก่อน clear
         User user = next.getUser();
+        int order = next.getRequestOrder();
+
+        requestRepository.delete(next);
+        requestRepository.flush();
+
+        requestRepository.decrementOrderAfter(type, order);
+
         if (user != null) {
-            user.setActiveRequests(
-                    Math.max(0, user.getActiveRequests() - 1)
-            );
+            user.setActiveRequests(safeDecrement(user.getActiveRequests()));
             userRepository.save(user);
         }
+
         return next;
     }
 
@@ -174,4 +194,12 @@ public class RequestService {
         return requestRepository.findByNormalizedKey(key)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
     }
+
+    private int safeDecrement(Integer value) {
+        return Math.max(0, (value == null ? 0 : value) - 1);
+    }
+    private int safeIncrement(Integer value) {
+        return (value == null ? 0 : value) + 1;
+    }
+
 }

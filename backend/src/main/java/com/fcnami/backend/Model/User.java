@@ -41,7 +41,7 @@ public class User {
 
     // Request's Bond
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL,
-            orphanRemoval = true, fetch = FetchType.LAZY)
+             fetch = FetchType.LAZY)
     private Set<Request> requests;
 
     @Column(nullable = false, updatable = false)

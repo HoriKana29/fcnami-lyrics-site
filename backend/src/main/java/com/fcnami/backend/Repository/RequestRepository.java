@@ -46,7 +46,7 @@ public interface RequestRepository extends JpaRepository<Request,Long> {
     List<Request> findByStatus(RequestStatus status);
 
     // เพิ่ม order ทั้งหมด +1 (ใช้ตอนแทรกหน้าคิว)
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE Request r
         SET r.requestOrder = r.requestOrder + 1
@@ -55,7 +55,7 @@ public interface RequestRepository extends JpaRepository<Request,Long> {
     int incrementOrderForQueue(QueueType queueType);
 
     // ลด order ทั้งหมด -1 (ใช้ตอนลบ)
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE Request r
         SET r.requestOrder = r.requestOrder - 1
@@ -71,4 +71,16 @@ public interface RequestRepository extends JpaRepository<Request,Long> {
     ORDER BY r.requestOrder ASC
 """)
     List<Request> findQueueForUpdate(QueueType queueType);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+    UPDATE Request r
+    SET r.requestOrder = r.requestOrder + 1
+    WHERE r.queueType = :queueType
+    AND r.requestOrder > :order
+""")
+    void incrementAfter(QueueType queueType, int order);
+
+    @Query("SELECT MAX(r.requestOrder) FROM Request r WHERE r.queueType = :type")
+    Integer findMaxOrder(QueueType type);
 }
