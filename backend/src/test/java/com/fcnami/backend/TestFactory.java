@@ -1,9 +1,6 @@
 package com.fcnami.backend;
 
-import com.fcnami.backend.Model.QueueRequest.QueueSnapshot;
-import com.fcnami.backend.Model.QueueRequest.QueueType;
-import com.fcnami.backend.Model.QueueRequest.Request;
-import com.fcnami.backend.Model.QueueRequest.RequestStatus;
+import com.fcnami.backend.Model.QueueRequest.*;
 import com.fcnami.backend.Model.SongTags.Song;
 import com.fcnami.backend.Model.SongTags.SongStatus;
 import com.fcnami.backend.Model.SongTags.Tag;
@@ -223,6 +220,13 @@ public class TestFactory {
         snapshot.setBatchId(batchId);
 
         return snapshot;
+    }
+
+    public static QueueCounter createQueueCounter(QueueType type, Long lastOrder) {
+        return QueueCounter.builder()
+                .queueType(type)
+                .lastOrder(lastOrder)
+                .build();
     }
 
 }

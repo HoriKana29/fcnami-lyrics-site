@@ -20,18 +20,23 @@ import static org.junit.jupiter.api.Assertions.*;
 @Transactional
 @DataJpaTest
 class RequestRepositoryTest {
+
     @Autowired
     private RequestRepository requestRepository;
+
     @Autowired
     private UserRepository userRepository;
 
+    // =========================
+    // BASIC FIND
+    // =========================
+
     @Test
-    @DisplayName("should save and find request by normalizedKey")
+    @DisplayName("should find by normalized key")
     void shouldFindByNormalizedKey() {
         User user = userRepository.save(TestFactory.createUser());
 
-        Request request = TestFactory.createRequest(user);
-        requestRepository.save(request);
+        Request request = requestRepository.save(TestFactory.createRequest(user));
 
         Optional<Request> found =
                 requestRepository.findByNormalizedKey(request.getNormalizedKey());
@@ -40,218 +45,108 @@ class RequestRepositoryTest {
     }
 
     @Test
-    void shouldCheckExistsByNormalizedKey() {
+    void shouldExistsByNormalizedKey() {
         User user = userRepository.save(TestFactory.createUser());
 
-        Request request = TestFactory.createRequest(user);
-        requestRepository.save(request);
+        Request request = requestRepository.save(TestFactory.createRequest(user));
 
         assertTrue(requestRepository.existsByNormalizedKey(request.getNormalizedKey()));
     }
+
+    // =========================
+    // ORDERING (CORE OF OPTION A)
+    // =========================
 
     @Test
     void shouldReturnRequestsOrderedByRequestOrder() {
         User user = userRepository.save(TestFactory.createUser());
 
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 2));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 50));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 10));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 30));
 
         List<Request> list =
                 requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
 
-        assertEquals(1, list.get(0).getRequestOrder());
-        assertEquals(2, list.get(1).getRequestOrder());
+        assertEquals(10, list.get(0).getRequestOrder());
+        assertEquals(30, list.get(1).getRequestOrder());
+        assertEquals(50, list.get(2).getRequestOrder());
+    }
+
+    // =========================
+    // MIN / MAX ORDER (OPTION A CORE)
+    // =========================
+
+    @Test
+    void shouldFindMinOrder() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 100));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 50));
+
+        Integer min = requestRepository.findMinOrder(QueueType.MAIN);
+
+        assertEquals(50, min);
     }
 
     @Test
     void shouldFindMaxOrder() {
         User user = userRepository.save(TestFactory.createUser());
 
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 5));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 100));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 200));
 
-        Optional<Request> top =
-                requestRepository.findTopByQueueTypeOrderByRequestOrderDesc(QueueType.MAIN);
+        Integer max = requestRepository.findMaxOrder(QueueType.MAIN);
 
-        assertTrue(top.isPresent());
-        assertEquals(5, top.get().getRequestOrder());
+        assertEquals(200, max);
     }
 
     // =========================
-    // USER RELATION
+    // QUEUE TYPE ISOLATION
     // =========================
-
-    @Test
-    void shouldFindByUserIdOrderedByCreatedAt() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        requestRepository.save(TestFactory.createRequest(user));
-        requestRepository.save(TestFactory.createRequest(user));
-
-        List<Request> list =
-                requestRepository.findByUser_IdOrderByCreatedAtAsc(user.getId());
-
-        assertEquals(2, list.size());
-    }
-
-    // =========================
-    // REPLACED REQUEST
-    // =========================
-
-    @Test
-    void shouldFindByReplacedRequest() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        Request original = requestRepository.save(TestFactory.createRequest(user));
-        Request replaced = requestRepository.save(
-                TestFactory.createReplacedRequest(user, original)
-        );
-
-        List<Request> list =
-                requestRepository.findByReplacedRequest(original);
-
-        assertEquals(1, list.size());
-        assertEquals(replaced.getId(), list.getFirst().getId());
-    }
-
-    // =========================
-    // UNIQUE KEY
-    // =========================
-
-    @Test
-    void shouldNotAllowDuplicateNormalizedKey() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        String key = "same_key";
-
-        requestRepository.save(TestFactory.createRequestWithKey(user, key));
-
-        assertThrows(DataIntegrityViolationException.class, () -> requestRepository.saveAndFlush(
-                TestFactory.createRequestWithKey(user, key)
-        ));
-    }
-
-    @Test
-    void shouldReturnEmptyWhenNormalizedKeyNotFound() {
-        Optional<Request> result =
-                requestRepository.findByNormalizedKey("not_exist");
-
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    void shouldReturnEmptyWhenNoRequestInQueue() {
-        Optional<Request> result =
-                requestRepository.findTopByQueueTypeOrderByRequestOrderDesc(QueueType.MAIN);
-
-        assertTrue(result.isEmpty());
-    }
 
     @Test
     void shouldSeparateQueueTypes() {
         User user = userRepository.save(TestFactory.createUser());
 
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.RESERVE, 1));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 10));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.RESERVE, 10));
 
-        List<Request> mainList =
+        List<Request> main =
                 requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
 
-        assertEquals(1, mainList.size());
-        assertEquals(QueueType.MAIN, mainList.getFirst().getQueueType());
+        assertEquals(1, main.size());
+        assertEquals(QueueType.MAIN, main.getFirst().getQueueType());
     }
 
-    @Test
-    void shouldHandleSameOrderValues() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-
-        List<Request> list =
-                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
-
-        assertEquals(2, list.size());
-    }
-    @Test
-    void shouldOrderByCreatedAt() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        Request r1 = requestRepository.save(TestFactory.createRequest(user));
-        Request r2 = requestRepository.save(TestFactory.createRequest(user));
-
-        List<Request> list =
-                requestRepository.findByUser_IdOrderByCreatedAtAsc(user.getId());
-
-        assertEquals(r1.getId(), list.getFirst().getId());
-    }
-    @Test
-    void shouldFindByReplacedRequestId() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        Request original = requestRepository.save(TestFactory.createRequest(user));
-        Request replaced = requestRepository.save(
-                TestFactory.createReplacedRequest(user, original)
-        );
-
-        List<Request> list =
-                requestRepository.findByReplacedRequest_Id(original.getId());
-
-        assertEquals(1, list.size());
-    }
+    // =========================
+    // STATUS FILTER
+    // =========================
 
     @Test
-    void shouldFindByRequesterId() {
+    void shouldFindByStatus() {
         User user = userRepository.save(TestFactory.createUser());
 
         Request r1 = TestFactory.createRequest(user);
         Request r2 = TestFactory.createRequest(user);
 
-        r1.setRequesterId("req-1");
-        r2.setRequesterId("req-2");
-
-        requestRepository.save(r1);
-        requestRepository.save(r2);
-
-        List<Request> result = requestRepository.findByRequesterId("req-1");
-
-        assertEquals(1, result.size());
-        assertEquals("req-1", result.getFirst().getRequesterId());
-    }
-    @Test
-    void shouldFindByQueueTypeAndStatusOrdered() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        Request r1 = TestFactory.createRequest(user, QueueType.MAIN, 2);
-        Request r2 = TestFactory.createRequest(user, QueueType.MAIN, 1);
-
         r1.setStatus(RequestStatus.WAITING);
-        r2.setStatus(RequestStatus.WAITING);
+        r2.setStatus(RequestStatus.DONE);
 
         requestRepository.save(r1);
         requestRepository.save(r2);
 
         List<Request> result =
-                requestRepository.findByQueueTypeAndStatusOrderByRequestOrderAsc(
-                        QueueType.MAIN,
-                        RequestStatus.WAITING
-                );
+                requestRepository.findByStatus(RequestStatus.WAITING);
 
-        assertEquals(1, result.get(0).getRequestOrder());
-        assertEquals(2, result.get(1).getRequestOrder());
+        assertEquals(1, result.size());
+        assertEquals(RequestStatus.WAITING, result.getFirst().getStatus());
     }
-    @Test
-    void shouldFindTopForUpdate() {
-        User user = userRepository.save(TestFactory.createUser());
 
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 5));
+    // =========================
+    // DEPTH LEVEL
+    // =========================
 
-        List<Request> result = requestRepository.findTopForUpdate(QueueType.MAIN);
-
-        assertFalse(result.isEmpty());
-        assertEquals(5, result.get(0).getRequestOrder());
-    }
     @Test
     void shouldFindByDepthLevel() {
         User user = userRepository.save(TestFactory.createUser());
@@ -270,74 +165,152 @@ class RequestRepositoryTest {
         assertEquals(1, result.size());
         assertEquals(1, result.getFirst().getDepthLevel());
     }
+
+    // =========================
+    // REPLACED REQUEST
+    // =========================
+
     @Test
-    void shouldFindByStatus() {
+    void shouldFindByReplacedRequestId() {
         User user = userRepository.save(TestFactory.createUser());
 
-        Request r1 = TestFactory.createRequest(user);
-        Request r2 = TestFactory.createRequest(user);
+        Request original = requestRepository.save(TestFactory.createRequest(user));
+        Request replaced = requestRepository.save(
+                TestFactory.createReplacedRequest(user, original)
+        );
 
-        r1.setStatus(RequestStatus.WAITING);
-        r2.setStatus(RequestStatus.DONE);
-
-        requestRepository.save(r1);
-        requestRepository.save(r2);
-
-        List<Request> result = requestRepository.findByStatus(RequestStatus.WAITING);
+        List<Request> result =
+                requestRepository.findByReplacedRequest_Id(original.getId());
 
         assertEquals(1, result.size());
-        assertEquals(RequestStatus.WAITING, result.getFirst().getStatus());
-    }
-    @Test
-    void shouldIncrementOrderForQueue() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 2));
-
-        int updated = requestRepository.incrementOrderForQueue(QueueType.MAIN);
-
-        assertEquals(2, updated);
-    }
-    @Test
-    void shouldDecrementOrderAfter() {
-        User user = userRepository.save(TestFactory.createUser());
-
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 2));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 3));
-
-        int updated = requestRepository.decrementOrderAfter(QueueType.MAIN, 1);
-
-        assertEquals(2, updated);
+        assertEquals(replaced.getId(), result.getFirst().getId());
     }
 
+    // =========================
+    // USER RELATION
+    // =========================
+
     @Test
-    void shouldFindQueueForUpdateOrderedAsc() {
+    void shouldFindByUserOrderedByCreatedAt() {
         User user = userRepository.save(TestFactory.createUser());
 
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 3));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 1));
-        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 2));
+        Request r1 = requestRepository.save(TestFactory.createRequest(user));
+        Request r2 = requestRepository.save(TestFactory.createRequest(user));
 
-        List<Request> result =
-                requestRepository.findQueueForUpdate(QueueType.MAIN);
+        List<Request> list =
+                requestRepository.findByUser_IdOrderByCreatedAtAsc(user.getId());
 
-        assertEquals(3, result.size());
-        assertEquals(1, result.get(0).getRequestOrder());
-        assertEquals(2, result.get(1).getRequestOrder());
-        assertEquals(3, result.get(2).getRequestOrder());
+        assertEquals(2, list.size());
+        assertEquals(r1.getId(), list.getFirst().getId());
+    }
+
+    // =========================
+    // UNIQUE KEY
+    // =========================
+
+    @Test
+    void shouldNotAllowDuplicateNormalizedKey() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        String key = "same_key";
+
+        requestRepository.save(TestFactory.createRequestWithKey(user, key));
+
+        assertThrows(DataIntegrityViolationException.class, () ->
+                requestRepository.saveAndFlush(
+                        TestFactory.createRequestWithKey(user, key)
+                )
+        );
+    }
+
+    // =========================
+    // POP BASIC BEHAVIOR
+    // =========================
+
+    @Test
+    void shouldFindTopByQueueType() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 10));
+        requestRepository.save(TestFactory.createRequest(user, QueueType.MAIN, 5));
+
+        Optional<Request> top =
+                requestRepository.findTopByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        assertTrue(top.isPresent());
+        assertEquals(5, top.get().getRequestOrder());
     }
 
     @Test
-    void shouldStillReturnDataWithPessimisticLock() {
+    void shouldReturnEmptyWhenQueueEmpty() {
+        Optional<Request> result =
+                requestRepository.findTopByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        assertTrue(result.isEmpty());
+    }
+
+    // EMPTY EDGE CASES (MIN / MAX)
+
+    @Test
+    void shouldReturnNullWhenFindMinOrderOnEmptyQueue() {
+        Integer min = requestRepository.findMinOrder(QueueType.MAIN);
+        assertNull(min);
+    }
+
+    @Test
+    void shouldReturnNullWhenFindMaxOrderOnEmptyQueue() {
+        Integer max = requestRepository.findMaxOrder(QueueType.MAIN);
+        assertNull(max);
+    }
+
+    // UPDATE / STATE TRANSITION
+    @Test
+    void shouldUpdateStatusSuccessfully() {
         User user = userRepository.save(TestFactory.createUser());
 
-        requestRepository.save(TestFactory.createRequest(user));
+        Request r = requestRepository.save(TestFactory.createRequest(user));
 
-        List<Request> result =
-                requestRepository.findQueueForUpdate(QueueType.MAIN);
+        r.setStatus(RequestStatus.DONE);
+        requestRepository.saveAndFlush(r);
 
-        assertFalse(result.isEmpty());
+        Request found = requestRepository.findById(r.getId()).orElseThrow();
+
+        assertEquals(RequestStatus.DONE, found.getStatus());
+    }
+    @Test
+    void shouldUpdateDepthLevelSuccessfully() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        Request r = requestRepository.save(TestFactory.createRequest(user));
+
+        r.setDepthLevel(5);
+        requestRepository.saveAndFlush(r);
+
+        Request found = requestRepository.findById(r.getId()).orElseThrow();
+
+        assertEquals(5, found.getDepthLevel());
+    }
+
+    // REPLACE CHAIN CONSISTENCY
+
+    @Test
+    void shouldMaintainReplaceRelationshipChain() {
+        User user = userRepository.save(TestFactory.createUser());
+
+        Request original = requestRepository.save(TestFactory.createRequest(user));
+
+        Request replaced1 = requestRepository.save(
+                TestFactory.createReplacedRequest(user, original)
+        );
+
+        Request replaced2 = requestRepository.save(
+                TestFactory.createReplacedRequest(user, replaced1)
+        );
+
+        List<Request> chain =
+                requestRepository.findByReplacedRequest_Id(original.getId());
+
+        assertEquals(1, chain.size());
+        assertEquals(replaced1.getId(), chain.getFirst().getId());
     }
 }

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -28,20 +29,29 @@ class RequestServiceConcurrencyTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private User user;
 
     @BeforeEach
-    void setup() {
-        user = userRepository.save(TestFactory.createUser());
-    }
-    @BeforeEach
     void clean() {
+
         requestRepository.deleteAll();
         userRepository.deleteAll();
+
+        jdbcTemplate.execute("TRUNCATE TABLE queue_counter");
+
+        jdbcTemplate.update("""
+        INSERT INTO queue_counter(queue_type, last_order)
+        VALUES ('MAIN', 0)
+    """);
+
+        user = userRepository.save(TestFactory.createUser());
     }
 
     // =========================================================
-    // 🔥 CONCURRENT CREATE REQUEST
+    // 🔥 CONCURRENT CREATE REQUEST (GAP ORDER SAFE)
     // =========================================================
     @Test
     void shouldHandleConcurrentRequests_withoutDuplicateOrder() throws Exception {
@@ -53,14 +63,14 @@ class RequestServiceConcurrencyTest {
         CountDownLatch ready = new CountDownLatch(threads);
         CountDownLatch start = new CountDownLatch(1);
 
-        List<Future<Void>> futures = new ArrayList<>();
+        List<Future<?>> futures = new ArrayList<>();
 
         for (int i = 0; i < threads; i++) {
             int index = i;
 
             futures.add(executor.submit(() -> {
-                ready.countDown();     // thread นี้พร้อมแล้ว
-                start.await();         // รอให้ยิงพร้อมกัน
+                ready.countDown();
+                start.await();
 
                 requestService.createRequest(
                         user.getId(),
@@ -73,14 +83,10 @@ class RequestServiceConcurrencyTest {
             }));
         }
 
-        // รอให้ทุก thread พร้อม
         ready.await();
-
-        // 🔥 ยิงพร้อมกัน
         start.countDown();
 
-        // รอทุก task ทำเสร็จ + check exception
-        for (Future<Void> f : futures) {
+        for (Future<?> f : futures) {
             f.get();
         }
 
@@ -92,16 +98,21 @@ class RequestServiceConcurrencyTest {
 
         assertEquals(threads, list.size());
 
-        // 🔥 order ต้องไม่ซ้ำ
+        // ✅ RULE: order must be unique (NOT sequential!)
         Set<Integer> orders = new HashSet<>();
         for (Request r : list) {
-            assertTrue(orders.add(r.getRequestOrder()),
-                    "Duplicate order found: " + r.getRequestOrder());
+            assertTrue(
+                    orders.add(r.getRequestOrder()),
+                    "Duplicate order detected: " + r.getRequestOrder()
+            );
+
+            assertTrue(r.getRequestOrder() >= 1000,
+                    "Order must follow GAP rule");
         }
     }
 
     // =========================================================
-    // 🔥 CONCURRENT INSERT AT TOP
+    // 🔥 CONCURRENT INSERT AT TOP (NO SHIFT GUARANTEE)
     // =========================================================
     @Test
     void shouldHandleConcurrentInsertAtTop() throws Exception {
@@ -113,7 +124,7 @@ class RequestServiceConcurrencyTest {
         CountDownLatch ready = new CountDownLatch(threads);
         CountDownLatch start = new CountDownLatch(1);
 
-        List<Future<Void>> futures = new ArrayList<>();
+        List<Future<?>> futures = new ArrayList<>();
 
         for (int i = 0; i < threads; i++) {
             int index = i;
@@ -136,7 +147,7 @@ class RequestServiceConcurrencyTest {
         ready.await();
         start.countDown();
 
-        for (Future<Void> f : futures) {
+        for (Future<?> f : futures) {
             f.get();
         }
 
@@ -148,7 +159,7 @@ class RequestServiceConcurrencyTest {
 
         assertEquals(threads, list.size());
 
-        // order ต้อง unique
+        // ✅ must be unique (no collision)
         Set<Integer> orders = new HashSet<>();
         for (Request r : list) {
             assertTrue(orders.add(r.getRequestOrder()));
@@ -156,16 +167,20 @@ class RequestServiceConcurrencyTest {
     }
 
     // =========================================================
-    // 🔥 CONCURRENT POP NEXT
+    // 🔥 CONCURRENT POP NEXT (CRITICAL SECTION TEST)
     // =========================================================
     @Test
     void shouldHandleConcurrentPopNext() throws Exception {
 
         int initial = 10;
 
-        // เตรียม queue ก่อน
         for (int i = 0; i < initial; i++) {
-            requestService.createRequest(user.getId(), "s" + i, "a", QueueType.MAIN);
+            requestService.createRequest(
+                    user.getId(),
+                    "song_" + i,
+                    "artist",
+                    QueueType.MAIN
+            );
         }
 
         int threads = 5;
@@ -178,6 +193,7 @@ class RequestServiceConcurrencyTest {
         List<Future<Request>> futures = new ArrayList<>();
 
         for (int i = 0; i < threads; i++) {
+
             futures.add(executor.submit(() -> {
                 ready.countDown();
                 start.await();
@@ -189,13 +205,17 @@ class RequestServiceConcurrencyTest {
         ready.await();
         start.countDown();
 
-        Set<Long> poppedIds = new HashSet<>();
+        Set<Long> popped = new HashSet<>();
 
         for (Future<Request> f : futures) {
             Request r = f.get();
+
             assertNotNull(r);
-            assertTrue(poppedIds.add(r.getId()),
-                    "Duplicate pop detected");
+
+            assertTrue(
+                    popped.add(r.getId()),
+                    "Duplicate pop detected: " + r.getId()
+            );
         }
 
         executor.shutdown();
@@ -206,4 +226,161 @@ class RequestServiceConcurrencyTest {
 
         assertEquals(initial - threads, remaining.size());
     }
+
+    @Test
+    void shouldNotBreak_whenCreateAndDeleteConcurrent() throws Exception {
+
+        requestService.createRequest(user.getId(), "s1", "a", QueueType.MAIN);
+        requestService.createRequest(user.getId(), "s2", "a", QueueType.MAIN);
+        requestService.createRequest(user.getId(), "s3", "a", QueueType.MAIN);
+        requestService.createRequest(user.getId(), "s4", "a", QueueType.MAIN);
+
+        List<Request> list =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        assertEquals(4, list.size());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<?> deleteTask = executor.submit(() -> {
+            ready.countDown();
+            start.await();
+
+            requestService.deleteRequest(list.get(1).getId());
+            return null;
+        });
+
+        Future<?> createTask = executor.submit(() -> {
+            ready.countDown();
+            start.await();
+
+            requestService.createRequest(user.getId(), "s5", "a", QueueType.MAIN);
+            return null;
+        });
+
+        ready.await();
+        start.countDown();
+
+        deleteTask.get();
+        createTask.get();
+
+        executor.shutdown();
+        executor.awaitTermination(10, TimeUnit.SECONDS);
+
+        List<Request> finalList =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        // ต้องไม่ crash + size ต้อง consistent (3 หรือ 4 แล้วแต่ race)
+        assertTrue(finalList.size() >= 3);
+        assertTrue(finalList.size() <= 4);
+
+        // order ต้องยัง unique
+        Set<Integer> orders = new HashSet<>();
+        for (Request r : finalList) {
+            assertTrue(orders.add(r.getRequestOrder()));
+        }
+    }
+    @Test
+    void shouldRemainConsistent_whenPopAndInsertAtTopConcurrent() throws Exception {
+
+        for (int i = 0; i < 5; i++) {
+            requestService.createRequest(user.getId(), "s" + i, "a", QueueType.MAIN);
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Request> popTask = executor.submit(() -> {
+            ready.countDown();
+            start.await();
+            return requestService.popNext(QueueType.MAIN);
+        });
+
+        Future<?> insertTask = executor.submit(() -> {
+            ready.countDown();
+            start.await();
+            requestService.insertAtTop(user.getId(), "TOP", "a", QueueType.MAIN);
+            return null;
+        });
+
+        ready.await();
+        start.countDown();
+
+        Request popped = popTask.get();
+        insertTask.get();
+
+        executor.shutdown();
+        executor.awaitTermination(10, TimeUnit.SECONDS);
+
+        List<Request> list =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        assertNotNull(popped);
+
+        // system ต้องยังไม่พัง
+        assertTrue(list.size() >= 4 && list.size() <= 6);
+
+        Set<Integer> orders = new HashSet<>();
+        for (Request r : list) {
+            assertTrue(orders.add(r.getRequestOrder()));
+        }
+    }
+
+//    @Test
+//    void stressTest_createRequests_1000() throws Exception {
+//
+//        int threads = 1000;
+//
+//        ExecutorService executor = Executors.newFixedThreadPool(50);
+//
+//        CountDownLatch ready = new CountDownLatch(threads);
+//        CountDownLatch start = new CountDownLatch(1);
+//
+//        List<Future<?>> futures = new ArrayList<>();
+//
+//        for (int i = 0; i < threads; i++) {
+//            int index = i;
+//
+//            futures.add(executor.submit(() -> {
+//                ready.countDown();
+//                start.await();
+//
+//                requestService.createRequest(
+//                        user.getId(),
+//                        "song_" + index,
+//                        "artist",
+//                        QueueType.MAIN
+//                );
+//
+//                return null;
+//            }));
+//        }
+//
+//        ready.await();
+//        start.countDown();
+//
+//        for (Future<?> f : futures) {
+//            f.get();
+//        }
+//
+//        executor.shutdown();
+//        executor.awaitTermination(30, TimeUnit.SECONDS);
+//
+//        List<Request> list =
+//                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+//
+//        assertEquals(threads, list.size());
+//
+//        // validate uniqueness
+//        Set<Integer> orders = new HashSet<>();
+//        for (Request r : list) {
+//            assertTrue(orders.add(r.getRequestOrder()));
+//            assertTrue(r.getRequestOrder() >= 1000);
+//        }
+//    }
 }

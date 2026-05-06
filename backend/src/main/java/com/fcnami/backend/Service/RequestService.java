@@ -5,11 +5,17 @@ import com.fcnami.backend.Model.QueueRequest.QueueType;
 import com.fcnami.backend.Model.QueueRequest.Request;
 import com.fcnami.backend.Model.QueueRequest.RequestStatus;
 import com.fcnami.backend.Model.User;
+import com.fcnami.backend.Repository.QueueCounterRepository;
 import com.fcnami.backend.Repository.RequestRepository;
 import com.fcnami.backend.Repository.UserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -20,51 +26,32 @@ public class RequestService {
 
     private final RequestRepository requestRepository;
     private final UserRepository userRepository;
+    private final QueueCounterRepository queueCounterRepository;
+    private final RequestInternalService internalService;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Request createRequestInternal(Long userId, String title, String artist, QueueType type) {
+    @PersistenceContext
+    private EntityManager entityManager;
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // 🔒 LOCK ทั้ง queue ก่อน
-        requestRepository.findQueueForUpdate(type);
-
-        Request request = RequestFactory.create(user, title, artist, type);
-
-        Integer maxOrder = requestRepository.findMaxOrder(type);
-        int nextOrder = (maxOrder == null ? 1 : maxOrder + 1);
-
-        request.setRequestOrder(nextOrder);
-
-        Request saved = requestRepository.save(request);
-
-        user.setActiveRequests(safeIncrement(user.getActiveRequests()));
-        userRepository.save(user);
-
-        return saved;
-    }
-
+    @Retryable(
+            retryFor = {
+                    DataIntegrityViolationException.class,
+                    CannotAcquireLockException.class
+            },
+            maxAttempts = 5,
+            backoff = @Backoff(
+                    delay = 50,
+                    multiplier = 2,
+                    maxDelay = 1000
+            )
+    )
+    @Transactional
     public Request createRequest(Long userId, String title, String artist, QueueType type) {
-
-        int retry = 0;
-
-        while (true) {
-            try {
-                return createRequestInternal(userId, title, artist, type);
-
-            } catch (org.springframework.dao.DataIntegrityViolationException |
-                     org.springframework.dao.CannotAcquireLockException e) {
-
-                if (++retry > 5) {
-                    throw e;
-                }
-
-                try {
-                    Thread.sleep(50); // backoff กันชน
-                } catch (InterruptedException ignored) {}
-            }
-        }
+        return internalService.createRequestInternal(
+                userId,
+                title,
+                artist,
+                type
+        );
     }
 
     public List<Request> getQueue(QueueType type) {
@@ -81,18 +68,9 @@ public class RequestService {
         Request request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
-        QueueType type = request.getQueueType();
-        int order = request.getRequestOrder();
-
         User user = request.getUser();
 
-        if (user != null && user.getRequests() != null) {
-            user.getRequests().remove(request);
-        }
-
         requestRepository.delete(request);
-        requestRepository.flush(); // ensure delete before bulk
-        requestRepository.decrementOrderAfter(type, order);
 
         if (user != null) {
             user.setActiveRequests(safeDecrement(user.getActiveRequests()));
@@ -104,14 +82,22 @@ public class RequestService {
     public Request insertAtTop(Long userId, String title, String artist, QueueType type) {
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow();
 
+        int TEMP = 1_000_000;
+        int GAP = 1000;
+
+        queueCounterRepository.lockQueue(type);
+
+        requestRepository.shiftToTemp(type, TEMP);
+        requestRepository.normalize(type.name(), GAP);
+
+        requestRepository.flush();
+        entityManager.clear();
+
+        // 4. insert ใหม่
         Request request = RequestFactory.create(user, title, artist, type);
-
-        requestRepository.findQueueForUpdate(type);
-        requestRepository.incrementOrderForQueue(type);
-
-        request.setRequestOrder(1);
+        request.setRequestOrder(GAP/2);
         request.setStatus(RequestStatus.WAITING);
 
         Request saved = requestRepository.save(request);
@@ -128,14 +114,6 @@ public class RequestService {
         Request original = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Original request not found"));
 
-        // lock queue
-        requestRepository.findQueueForUpdate(original.getQueueType());
-
-        int insertOrder = original.getRequestOrder() + 1;
-
-        // shift
-        requestRepository.incrementAfter(original.getQueueType(), original.getRequestOrder());
-
         Request newRequest = RequestFactory.replace(
                 original.getUser(),
                 original,
@@ -144,10 +122,9 @@ public class RequestService {
         );
 
         newRequest.setQueueType(original.getQueueType());
-        newRequest.setDepthLevel(
-                original.getDepthLevel() == null ? 1 : original.getDepthLevel() + 1
-        );
-        newRequest.setRequestOrder(insertOrder);
+
+        // 🔥 insert next to original (gap-based)
+        newRequest.setRequestOrder(original.getRequestOrder() + 1);
 
         return requestRepository.save(newRequest);
     }
@@ -155,21 +132,15 @@ public class RequestService {
     @Transactional
     public Request popNext(QueueType type) {
 
-        List<Request> queue = requestRepository.findQueueForUpdate(type);
+        List<Request> queue = requestRepository.lockQueue(type);
 
         if (queue.isEmpty()) return null;
 
         Request next = queue.getFirst();
 
-        //  ดึงค่าที่ต้องใช้ก่อน clear
-        User user = next.getUser();
-        int order = next.getRequestOrder();
-
         requestRepository.delete(next);
-        requestRepository.flush();
 
-        requestRepository.decrementOrderAfter(type, order);
-
+        User user = next.getUser();
         if (user != null) {
             user.setActiveRequests(safeDecrement(user.getActiveRequests()));
             userRepository.save(user);
