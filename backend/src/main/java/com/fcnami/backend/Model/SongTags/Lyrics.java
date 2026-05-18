@@ -22,10 +22,17 @@ public class Lyrics {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // ความสัมพันธ์ OneToOne : 1 เพลง <-> 1 Lyrics
+    // fetch Lazy : โหลดข้อมูลเมื่อเรียกใช้
+    // *** EAGER โหลดทันที การันตีใช้งาน
     @OneToOne(fetch = FetchType.LAZY)
+
+    // song_id คือ foreign key -> ดึงมาจาก id
+    // ห้าม null / ห้ามซ้ำ
     @JoinColumn(name = "song_id", nullable = false, unique = true)
     private Song song;
 
+    // กำหนด type ของแต่ละส่วนเป็น TEXT ~ ราวๆ 65000 ตัวอักษร
     @Column(columnDefinition = "TEXT")
     private String kanji;
 
@@ -35,13 +42,16 @@ public class Lyrics {
     @Column(columnDefinition = "TEXT")
     private String thai;
 
+    // เก็บหมายเหตุเพิ่มเติม เกี่ยวกับตัวเพลง
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    // เก็บเวลาที่ record นี้ถูกอัปเดตล่าสุด
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    @PreUpdate
+    @PrePersist // เรียก Method นี้ก่อน insert เสมอ
+    @PreUpdate // เรียก Method นี้ก่อน update เสมอ
+    // ให้เวลาเป็นปัจจุบันทุกครั้งที่มีการบันทึกข้อมูล
     protected void touch() {
         updatedAt = LocalDateTime.now();
     }
