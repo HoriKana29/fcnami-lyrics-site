@@ -13,6 +13,8 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+
+// แทนคำขอเพลง 1 รายการ
 @Entity
 @Table(name = "requests",
         indexes = {
@@ -39,14 +41,18 @@ public class Request {
     private User user;
 
     // name to show
+    // อาจใช้เป็น @name จาก Youtube
     private String requesterName;
 
+    // ชื่อเพลงที่รีเควส
     @Column(nullable = false)
     private String songTitle;
 
+    // ชื่อศิลปิน/วง
     @Column(nullable = false)
     private String artist;
 
+    //  Link กับ Song entity
     @ManyToOne
     @JoinColumn(name = "song_id")
     private Song song;
@@ -75,7 +81,7 @@ public class Request {
     @JoinColumn(name = "replaced_request_id")
     private Request replacedRequest;
 
-    // ใครดึงไป??
+    // บอกว่าใครดึงไป
     @OneToMany(mappedBy = "replacedRequest", fetch = FetchType.LAZY)
     private Set<Request> replacedBy;
 
