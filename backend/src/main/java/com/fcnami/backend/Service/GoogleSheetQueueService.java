@@ -13,6 +13,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+// *** ตอนนี้ขอทำเป็นดึงจาก Google Sheet มาก่อน แต่หากระบบลงตัว จะทำให้ Admin(เรา) กรอก Request ภายในเว็บไซต๋เราเลย
 public class GoogleSheetQueueService {
     private final QueueProperties properties;
     private final RestClient.Builder restClientBuilder;
@@ -21,27 +22,34 @@ public class GoogleSheetQueueService {
     private Instant cachedAt = Instant.EPOCH;
 
     public synchronized QueueResponse getQueue(String search, String status, String tier) {
+        // โหลดข้อมูล
         QueueResponse snapshot = refreshIfNeeded();
+        // filter ข้อมูล
         List<QueueItemResponse> filtered = snapshot.items().stream()
                 .filter(item -> matchesSearch(item, search))
                 .filter(item -> matches(item.status(), status))
                 .filter(item -> matches(item.tier(), tier))
                 .toList();
+        // return ใหม่
         return new QueueResponse(snapshot.syncedAt(), filtered.size(), filtered);
     }
 
+    // ดึงข้อมูลจริงจาก Google Sheet
     public synchronized QueueResponse refresh() {
+        // parse + normalize
         String csv = restClientBuilder.build()
                 .get()
                 .uri(properties.sheetCsvUrl())
                 .retrieve()
                 .body(String.class);
         List<QueueItemResponse> items = normalize(parseCsv(csv == null ? "" : csv));
+        // cache เก็บข้อมูลชั่วคราว
         cached = new QueueResponse(Instant.now(), items.size(), items);
         cachedAt = Instant.now();
         return cached;
     }
 
+    // อย่างน้อย 30 วิ
     private QueueResponse refreshIfNeeded() {
         long ttl = Math.max(30, properties.cacheTtlSeconds());
         if (cached == null || Duration.between(cachedAt, Instant.now()).getSeconds() > ttl) {
@@ -52,6 +60,7 @@ public class GoogleSheetQueueService {
 
     private List<QueueItemResponse> normalize(List<Map<String, String>> rows) {
         List<QueueItemResponse> items = new ArrayList<>();
+        // จัด tier
         String currentTier = "main-road";
         int generatedOrder = 1;
 
@@ -61,6 +70,7 @@ public class GoogleSheetQueueService {
                 currentTier = normalizeTier(tierMarker);
             }
 
+            // หา title
             String title = firstValue(row, "song", "song title", "title", "เพลง", "ชื่อเพลง");
             if (!hasText(title)) {
                 String firstCell = row.values().stream().filter(this::hasText).findFirst().orElse("");
@@ -130,6 +140,7 @@ public class GoogleSheetQueueService {
         row.add(cell.toString().trim());
         table.add(row);
 
+        // Condition table ไม่เคยว่างเลย
         if (table.isEmpty()) {
             return List.of();
         }
@@ -264,4 +275,11 @@ public class GoogleSheetQueueService {
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
+
+    // ระวัง
+    //    1. CSV parser เขียนเอง →  Test edge case ด้วย
+    //    2. normalize heuristic → อาจพลาด
+    //    3. synchronized → อาจ bottleneck
+
+    // ** ถ้ามี Parser อยากให้ทำ Class แยกไว้นะ
 }

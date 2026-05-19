@@ -53,6 +53,9 @@ public class RequestFactory {
         return "req_" + UUID.randomUUID();
     }
 
+    //"Brave-Shine"
+    //"Brave Shine"
+    // อาจไม่เท่ากัน
     private static String generateNormalizedKey(String title, String artist) {
         return (title + "_" + artist)
                 .toLowerCase()

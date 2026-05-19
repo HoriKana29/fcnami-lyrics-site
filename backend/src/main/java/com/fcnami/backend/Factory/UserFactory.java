@@ -4,6 +4,9 @@ import com.fcnami.backend.Model.User;
 
 import java.util.UUID;
 
+// Class 'UserFactory' is never used
+// Builder ไม่ enforce required field แต่คงไม่มีปัญหา ลองเช็คดูนะ
+// ไม่มี validation
 public class UserFactory {
     public static User create(String userIdentifier, String username, String email) {
         return User.builder()

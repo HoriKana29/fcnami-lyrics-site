@@ -20,17 +20,22 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
     // BASIC QUERY (READ ONLY)
     // =========================
 
+    // ดู History ของ User
     List<Request> findByUser_IdOrderByCreatedAtAsc(Long userId);
 
+    // หา YoutubeID
     List<Request> findByRequesterId(String requesterId);
 
+    // Queue เรียงตาม order จริง
     List<Request> findByQueueTypeOrderByRequestOrderAsc(QueueType queueType);
 
+    // แบ่งตาม QueueType + Status
     List<Request> findByQueueTypeAndStatusOrderByRequestOrderAsc(
             QueueType queueType,
             RequestStatus status
     );
 
+    // กันซ้ำ
     Optional<Request> findByNormalizedKey(String normalizedKey);
 
     boolean existsByNormalizedKey(String normalizedKey);
@@ -39,6 +44,7 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
 
     List<Request> findByStatus(RequestStatus status);
 
+    // No Usage
     List<Request> findByReplacedRequest(Request request);
 
     List<Request> findByReplacedRequest_Id(Long requestId);
@@ -78,6 +84,8 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
     // OPTIONAL: COUNTER TABLE (ONLY IF YOU STILL NEED SEQUENCE)
     // =========================
 
+    // Unable to resolve table
+    // ขึ้นแดงของ IntelliJ น่าจะเพราะผูกกับ MySQL แนะนำให้ใช้ Database เป็น MySQL หรือ ลบทิ้งหากไม่ใช้งาน
     @Modifying
     @Query(value = """
         UPDATE queue_counter
@@ -125,6 +133,8 @@ SET r.request_order = x.new_order
     void normalize(@Param("type") String type,
                    @Param("gap") int gap);
 
+
+    // lock ทั้ง queue ใช้ตาม reorder / normalize
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
     SELECT r FROM Request r

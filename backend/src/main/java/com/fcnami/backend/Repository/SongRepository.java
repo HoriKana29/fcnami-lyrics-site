@@ -14,6 +14,8 @@ public interface SongRepository extends JpaRepository<Song, Long> {
     Optional<Song> findByNormalizedKey(String normalizedKey);
     Optional<Song> findBySlug(String slug);
     boolean existsByNormalizedKey(String normalizedKey);
+
+    // Method 'existsBySlug(java.lang.String)' is never used
     boolean existsBySlug(String slug);
 
     // Search
@@ -22,6 +24,11 @@ public interface SongRepository extends JpaRepository<Song, Long> {
     List<Song> findByTitleContainingIgnoreCaseOrArtistContainingIgnoreCase(String title, String artist);
 
     List<Song> findByStatus(SongStatus status);
+
+    // Spring เข้าใจแบบนี้ใช่มั้ย
+    //(status = A AND title LIKE ?)
+    //OR
+    //(status = B AND artist LIKE ?)
     Page<Song> findByStatusAndTitleContainingIgnoreCaseOrStatusAndArtistContainingIgnoreCase(
             SongStatus titleStatus,
             String title,
@@ -42,7 +49,10 @@ public interface SongRepository extends JpaRepository<Song, Long> {
     Page<Song> findByArtistContainingIgnoreCase(String artist, Pageable pageable);
     Page<Song> findByStatus(SongStatus status, Pageable pageable);
 
+    // มี Tag ไหนก็ได้
     List<Song> findByTags_NormalizedNameIn(List<String> tags);
+
+    // ต้องมีครบทุก Tag
     @Query("""
         SELECT s FROM Song s
         JOIN s.tags t
