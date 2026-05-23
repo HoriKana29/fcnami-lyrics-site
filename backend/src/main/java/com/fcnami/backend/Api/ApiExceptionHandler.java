@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.time.Instant;
 import java.util.Map;
 
+// ดัก exception จาก ทุก Controller
 @RestControllerAdvice
 public class ApiExceptionHandler {
     @ExceptionHandler(EntityNotFoundException.class)
@@ -29,4 +30,6 @@ public class ApiExceptionHandler {
     private Map<String, Object> error(String code, Object message) {
         return Map.of("timestamp", Instant.now(), "code", code, "message", message);
     }
+    //ไม่มี fallback handler
+    // ขาด error id / trace id
 }

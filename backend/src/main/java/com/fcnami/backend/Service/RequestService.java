@@ -27,6 +27,7 @@ public class RequestService {
     private final QueueCounterRepository queueCounterRepository;
     private final RequestInternalService internalService;
 
+    // แก้ปัญหา Database lock ไม่ได้/ชน/race condition
     @Retryable(
             retryFor = {
                     DataIntegrityViolationException.class,
@@ -49,10 +50,12 @@ public class RequestService {
         );
     }
 
+    // Return value of the method is never used
     public List<Request> getQueue(QueueType type) {
         return requestRepository.findByQueueTypeOrderByRequestOrderAsc(type);
     }
 
+    // Return value of the method is never used
     public List<Request> getQueueByStatus(QueueType type, RequestStatus status) {
         return requestRepository.findByQueueTypeAndStatusOrderByRequestOrderAsc(type, status);
     }
@@ -60,19 +63,23 @@ public class RequestService {
     @Transactional
     public void deleteRequest(Long requestId) {
 
+        // หา Request
         Request request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
         User user = request.getUser();
 
+        // ลบ request
         requestRepository.delete(request);
 
+        // ลด activeRequests ของ user
         if (user != null) {
             user.setActiveRequests(safeDecrement(user.getActiveRequests()));
             userRepository.save(user);
         }
     }
 
+    // แทรก Request ขึ้นหัวคิว
     @Transactional
     public Request insertAtTop(Long userId, String title, String artist, QueueType type) {
 
@@ -81,12 +88,15 @@ public class RequestService {
 
         int GAP = 1000;
 
+        // lock ทั้งคิวก่อน
         queueCounterRepository.lockQueue(type);
         List<Request> existing = requestRepository.lockQueue(type);
+        // reorder ใหม่หมด
         for (int i = 0; i < existing.size(); i++) {
             existing.get(i).setRequestOrder((i + 1) * GAP);
         }
         requestRepository.saveAll(existing);
+        // ส่งไป Database
         requestRepository.flush();
 
         // 4. insert ใหม่
@@ -102,6 +112,8 @@ public class RequestService {
         return saved;
     }
 
+    // สร้างใหม่จากของเดิม และแทรกไว้ติดที่เก่า
+    // ** ฝากดูความเสี่ยงเรื่อง order แน่นและ อาจต้อง re-balance
     @Transactional
     public Request replaceRequest(Long requestId, String title, String artist) {
 
@@ -123,9 +135,11 @@ public class RequestService {
         return requestRepository.save(newRequest);
     }
 
+    // ดึงคิวถัดไปออกจากคิว
     @Transactional
     public Request popNext(QueueType type) {
 
+        // ล็อคก่อนทำ
         List<Request> queue = requestRepository.lockQueue(type);
 
         if (queue.isEmpty()) return null;
@@ -167,4 +181,5 @@ public class RequestService {
         return (value == null ? 0 : value) + 1;
     }
 
+    // *** ต้อง ensure ว่า lockQueue() ใช้ FOR UPDATE
 }

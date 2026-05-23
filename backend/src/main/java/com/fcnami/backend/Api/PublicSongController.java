@@ -32,4 +32,8 @@ public class PublicSongController {
     public SongResponse detail(@PathVariable String slug) {
         return songCatalogService.getBySlug(slug);
     }
+
+    // ควรมี validation param
+    // sort default อาจไม่พอ เพิ่ม popularity/desc
+
 }

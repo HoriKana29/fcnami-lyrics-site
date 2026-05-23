@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+// เป็น Controller return JSON
 @RestController
 @RequestMapping("/api/admin/songs")
 @RequiredArgsConstructor
@@ -19,7 +20,10 @@ public class AdminSongController {
     }
 
     @PutMapping("/{id}")
-    public SongResponse update(@PathVariable Long id, @Valid @RequestBody SongUpsertRequest request) {
+    public SongResponse update(@PathVariable Long id //รับ id จาก URL
+                               , @Valid @RequestBody SongUpsertRequest request) {
         return songCatalogService.update(id, request);
     }
+
+    // ไม่มี response status ชัดเจน Example 201
 }

@@ -17,6 +17,8 @@ public class RequestInternalService {
     private final QueueCounterRepository queueCounterRepository;
 
     @Transactional
+    // method นี้จะทำงานใน transaction เดียว
+    // error -> rollback กลับทั้งหมด
     public Request createRequestInternal(
             Long userId,
             String title,
@@ -25,6 +27,7 @@ public class RequestInternalService {
     ) {
 
         // 1. lock user
+        // ไม่ใช่ lock จริง แต่ transaction จะช่วย consistency
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -37,13 +40,16 @@ public class RequestInternalService {
         }
 
         // 4. 🔥 LOCK counter row (critical section)
+        // lock row ของ counter ตาม type
         QueueCounter counter = queueCounterRepository.findForUpdate(type);
 
+        // เช็ค null counter
         if (counter == null) {
             throw new IllegalStateException("QueueCounter not initialized");
         }
 
         // 5. atomic increment (NO race condition anymore)
+        // กระบวนการของแต่ละ Tread จะอัปเดตเสมอ (1000 เผื่อแทรกคิวในอนาคต)
         long newOrder = counter.getLastOrder() + 1000;
         counter.setLastOrder(newOrder);
 

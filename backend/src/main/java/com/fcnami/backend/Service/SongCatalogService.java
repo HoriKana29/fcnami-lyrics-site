@@ -25,6 +25,7 @@ public class SongCatalogService {
     private final SongRepository songRepository;
     private final TagRepository tagRepository;
 
+    // หาเพลง
     @Transactional(readOnly = true)
     public Page<SongResponse> listPublicSongs(String search, SongStatus status, Pageable pageable) {
         Page<Song> songs;
@@ -42,6 +43,7 @@ public class SongCatalogService {
         return songs.map(this::toResponse);
     }
 
+    // ใช้ slug หาเพลง
     @Transactional(readOnly = true)
     public SongResponse getBySlug(String slug) {
         return songRepository.findBySlug(slug)
@@ -49,6 +51,7 @@ public class SongCatalogService {
                 .orElseThrow(() -> new EntityNotFoundException("Song not found: " + slug));
     }
 
+    // สร้างเพลงใหม่ *** เช็คว่าไปซ้ำกับใน Factory รึเปล่า ถ้าซ้ำหรือใกล้เคียง ให้เพิ่ม Function ใน Factory
     @Transactional
     public SongResponse create(SongUpsertRequest request) {
         Song song = new Song();
@@ -99,6 +102,7 @@ public class SongCatalogService {
         song.setTags(tags);
     }
 
+    // loop ทุกชื่อ -> normalize -> หา -> ไม่มีก็สร้างใหม่
     private void addTags(Set<Tag> target, Set<String> names, TagType type) {
         if (names == null) {
             return;
@@ -188,4 +192,8 @@ public class SongCatalogService {
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
+
+// *** uniqueSlug / key → loop query DB (ถ้า scale ใหญ่ต้อง optimize)
+// *** addTags → อาจโดน race condition ถ้า create tag พร้อมกันหลาย thread (ควรมี unique constraint DB)
+// *** extractYoutubeId → ยัง handle case ไม่ครบทุก format
 }
