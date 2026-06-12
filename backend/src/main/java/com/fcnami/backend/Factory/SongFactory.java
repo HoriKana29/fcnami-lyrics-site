@@ -8,24 +8,18 @@ import com.fcnami.backend.Support.SlugUtil;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-// Class 'SongFactory' is never used
-// ไม่มี validation
+
 public class SongFactory {
     public static Song create(String title, String artist) {
         Song song = new Song();
 
-        song.setTitle(title);
-        song.setArtist(artist);
+        song.setTitle(requireText(title, "title"));
+        song.setArtist(requireText(artist, "artist"));
 
-        // Factory กับ Entity ใช้ logic ไม่เหมือนกัน อยากให้ยืดตาม Entity เป็นหลัก
         song.setNormalizedKey(SlugUtil.normalizedKey(title, artist));
-        song.setSlug(SlugUtil.slugify(title));
+        song.setSlug(SlugUtil.slugify(title + "-" + artist));
 
-        // only set if you WANT factory-level default control
         song.setStatus(SongStatus.IDEA);
-
-        // prevent null issues for ManyToMany
-        // แก้ tag → กระทบหลาย object
         song.setTags(new HashSet<>());
 
         return song;
@@ -50,4 +44,10 @@ public class SongFactory {
         return song;
     }
 
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " is required");
+        }
+        return value.trim();
+    }
 }

@@ -4,15 +4,12 @@ import com.fcnami.backend.Model.User;
 
 import java.util.UUID;
 
-// Class 'UserFactory' is never used
-// Builder ไม่ enforce required field แต่คงไม่มีปัญหา ลองเช็คดูนะ
-// ไม่มี validation
 public class UserFactory {
     public static User create(String userIdentifier, String username, String email) {
         return User.builder()
-                .userIdentifier(userIdentifier)
-                .username(username)
-                .email(email)
+                .userIdentifier(requireText(userIdentifier, "userIdentifier"))
+                .username(requireText(username, "username"))
+                .email(trimOrNull(email))
                 .totalRequests(0)
                 .activeRequests(0)
                 .build();
@@ -35,5 +32,16 @@ public class UserFactory {
 
     private static String generateYoutubeUserIdentifier() {
         return "yt_" + UUID.randomUUID();
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " is required");
+        }
+        return value.trim();
+    }
+
+    private static String trimOrNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

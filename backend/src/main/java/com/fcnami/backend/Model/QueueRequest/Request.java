@@ -13,8 +13,6 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-
-// แทนคำขอเพลง 1 รายการ
 @Entity
 @Table(name = "requests",
         indexes = {
@@ -32,7 +30,6 @@ public class Request {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Requester's ID
     @Column(nullable = false)
     private String requesterId;
 
@@ -40,57 +37,45 @@ public class Request {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    // name to show
-    // อาจใช้เป็น @name จาก Youtube
     private String requesterName;
 
-    // ชื่อเพลงที่รีเควส
     @Column(nullable = false)
     private String songTitle;
 
-    // ชื่อศิลปิน/วง
     @Column(nullable = false)
     private String artist;
 
-    //  Link กับ Song entity
     @ManyToOne
     @JoinColumn(name = "song_id")
     private Song song;
 
-    // กันซ้ำ
-    @Column(nullable = false,unique = true)
+    @Column(nullable = false, unique = true)
     private String normalizedKey;
 
-    // Request's Status
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RequestStatus status = RequestStatus.WAITING;
 
-    // Queue Type
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private QueueType queueType;
     private Integer depthLevel;
 
-    // Label
     @Column(nullable = false)
     private Integer requestOrder;
 
-    // Replace Queue
     @ManyToOne
     @JoinColumn(name = "replaced_request_id")
     private Request replacedRequest;
 
-    // บอกว่าใครดึงไป
     @OneToMany(mappedBy = "replacedRequest", fetch = FetchType.LAZY)
     private Set<Request> replacedBy;
 
-    // Time
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    // Auto set time
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

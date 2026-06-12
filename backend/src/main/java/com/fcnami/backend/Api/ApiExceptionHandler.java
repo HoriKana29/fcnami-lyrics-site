@@ -9,8 +9,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
-// ดัก exception จาก ทุก Controller
 @RestControllerAdvice
 public class ApiExceptionHandler {
     @ExceptionHandler(EntityNotFoundException.class)
@@ -27,9 +27,24 @@ public class ApiExceptionHandler {
                 .toList());
     }
 
-    private Map<String, Object> error(String code, Object message) {
-        return Map.of("timestamp", Instant.now(), "code", code, "message", message);
+    @ExceptionHandler(RuntimeException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> runtime(RuntimeException exception) {
+        return error("bad_request", exception.getMessage());
     }
-    //ไม่มี fallback handler
-    // ขาด error id / trace id
+
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Map<String, Object> fallback(Exception exception) {
+        return error("internal_error", "Unexpected server error");
+    }
+
+    private Map<String, Object> error(String code, Object message) {
+        return Map.of(
+                "timestamp", Instant.now(),
+                "errorId", UUID.randomUUID().toString(),
+                "code", code,
+                "message", message
+        );
+    }
 }

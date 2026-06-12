@@ -5,9 +5,9 @@ import com.fcnami.backend.Api.SongDtos.SongUpsertRequest;
 import com.fcnami.backend.Service.SongCatalogService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-// เป็น Controller return JSON
 @RestController
 @RequestMapping("/api/admin/songs")
 @RequiredArgsConstructor
@@ -15,15 +15,13 @@ public class AdminSongController {
     private final SongCatalogService songCatalogService;
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     public SongResponse create(@Valid @RequestBody SongUpsertRequest request) {
         return songCatalogService.create(request);
     }
 
     @PutMapping("/{id}")
-    public SongResponse update(@PathVariable Long id //รับ id จาก URL
-                               , @Valid @RequestBody SongUpsertRequest request) {
+    public SongResponse update(@PathVariable Long id, @Valid @RequestBody SongUpsertRequest request) {
         return songCatalogService.update(id, request);
     }
-
-    // ไม่มี response status ชัดเจน Example 201
 }

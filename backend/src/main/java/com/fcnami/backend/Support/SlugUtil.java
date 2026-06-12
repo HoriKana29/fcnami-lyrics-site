@@ -3,7 +3,6 @@ package com.fcnami.backend.Support;
 import java.text.Normalizer;
 import java.util.Locale;
 
-// กัน slug+key ซ้ำทั้งระบบ
 public final class SlugUtil {
     private SlugUtil() {
     }
@@ -25,5 +24,4 @@ public final class SlugUtil {
     public static String normalizedKey(String title, String artist) {
         return slugify((title == null ? "" : title) + "-" + (artist == null ? "" : artist));
     }
-    // ภาษาไทย / ญี่ปุ่น → จะหายหมด ซึ่งไม่น่ามีปัญหาสำหรับ slug
 }

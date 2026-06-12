@@ -15,17 +15,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class SongCatalogService {
+    private static final Pattern YOUTUBE_ID_PATTERN = Pattern.compile(
+            "(?:youtu\\.be/|youtube\\.com/(?:watch\\?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})"
+    );
+
     private final SongRepository songRepository;
     private final TagRepository tagRepository;
 
-    // หาเพลง
     @Transactional(readOnly = true)
     public Page<SongResponse> listPublicSongs(String search, SongStatus status, Pageable pageable) {
         Page<Song> songs;
@@ -43,7 +49,6 @@ public class SongCatalogService {
         return songs.map(this::toResponse);
     }
 
-    // ใช้ slug หาเพลง
     @Transactional(readOnly = true)
     public SongResponse getBySlug(String slug) {
         return songRepository.findBySlug(slug)
@@ -51,7 +56,6 @@ public class SongCatalogService {
                 .orElseThrow(() -> new EntityNotFoundException("Song not found: " + slug));
     }
 
-    // สร้างเพลงใหม่ *** เช็คว่าไปซ้ำกับใน Factory รึเปล่า ถ้าซ้ำหรือใกล้เคียง ให้เพิ่ม Function ใน Factory
     @Transactional
     public SongResponse create(SongUpsertRequest request) {
         Song song = new Song();
@@ -102,7 +106,6 @@ public class SongCatalogService {
         song.setTags(tags);
     }
 
-    // loop ทุกชื่อ -> normalize -> หา -> ไม่มีก็สร้างใหม่
     private void addTags(Set<Tag> target, Set<String> names, TagType type) {
         if (names == null) {
             return;
@@ -111,24 +114,30 @@ public class SongCatalogService {
             if (!hasText(name)) {
                 continue;
             }
-            String normalized = SlugUtil.slugify(name);
-            Tag tag = tagRepository.findByNormalizedName(normalized).orElseGet(() -> {
-                Tag created = new Tag();
-                created.setName(name.trim());
-                created.setNormalizedName(normalized);
-                created.setType(type);
-                return tagRepository.save(created);
-            });
-            target.add(tag);
+            target.add(findOrCreateTag(name, type));
         }
     }
 
+    private Tag findOrCreateTag(String name, TagType type) {
+        String normalized = SlugUtil.slugify(name);
+        return tagRepository.findByNormalizedName(normalized).orElseGet(() -> createTag(name, normalized, type));
+    }
+
+    private Tag createTag(String name, String normalized, TagType type) {
+        Tag created = new Tag();
+        created.setName(name.trim());
+        created.setNormalizedName(normalized);
+        created.setType(type);
+        return tagRepository.save(created);
+    }
+
     private SongResponse toResponse(Song song) {
-        Set<String> tags = song.getTags().stream()
+        Set<Tag> songTags = safeTags(song);
+        Set<String> tags = songTags.stream()
                 .filter(tag -> tag.getType() != TagType.MOOD)
                 .map(Tag::getName)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        Set<String> moods = song.getTags().stream()
+        Set<String> moods = songTags.stream()
                 .filter(tag -> tag.getType() == TagType.MOOD)
                 .map(Tag::getName)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -141,6 +150,10 @@ public class SongCatalogService {
                 song.getSourceAnimeOrGame(), song.getYoutubeUrl(), song.getYoutubeVideoId(), song.getThumbnailUrl(),
                 song.getStatus(), tags, moods, song.getCreatedAt(), song.getUpdatedAt(), song.getPublishedAt(), lyricsResponse
         );
+    }
+
+    private Set<Tag> safeTags(Song song) {
+        return song.getTags() == null ? Collections.emptySet() : song.getTags();
     }
 
     private String uniqueSlug(String title, Long currentSongId) {
@@ -179,21 +192,11 @@ public class SongCatalogService {
         if (!hasText(youtubeUrl)) {
             return null;
         }
-        String trimmed = youtubeUrl.trim();
-        if (trimmed.contains("youtu.be/")) {
-            return trimmed.substring(trimmed.indexOf("youtu.be/") + 9).split("[?&/]")[0];
-        }
-        if (trimmed.contains("v=")) {
-            return trimmed.substring(trimmed.indexOf("v=") + 2).split("[?&]")[0];
-        }
-        return null;
+        Matcher matcher = YOUTUBE_ID_PATTERN.matcher(youtubeUrl.trim());
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
-
-// *** uniqueSlug / key → loop query DB (ถ้า scale ใหญ่ต้อง optimize)
-// *** addTags → อาจโดน race condition ถ้า create tag พร้อมกันหลาย thread (ควรมี unique constraint DB)
-// *** extractYoutubeId → ยัง handle case ไม่ครบทุก format
 }

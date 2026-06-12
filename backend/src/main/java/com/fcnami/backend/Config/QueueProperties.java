@@ -1,8 +1,14 @@
 package com.fcnami.backend.Config;
 
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
-// ให้เช็คว่าได้ enable รึยัง และ ยังขาด validation
+@Validated
 @ConfigurationProperties(prefix = "fcnami.queue")
-public record QueueProperties(String sheetCsvUrl, long cacheTtlSeconds) {
+public record QueueProperties(
+        @NotBlank String sheetCsvUrl,
+        @Min(30) long cacheTtlSeconds
+) {
 }

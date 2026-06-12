@@ -28,6 +28,4 @@ public class QueueController {
     public QueueResponse sync() {
         return queueService.refresh();
     }
-
-    // อาจพิจารณาการใช้ Enum แทน String ในส่วนของ Status และ tier
 }

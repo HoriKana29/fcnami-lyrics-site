@@ -21,23 +21,28 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class RequestService {
+    private static final int QUEUE_GAP = 1000;
+    private static final int TOP_INSERT_ORDER = QUEUE_GAP / 2;
+    private static final int RETRY_MAX_ATTEMPTS = 5;
+    private static final int RETRY_INITIAL_DELAY_MS = 50;
+    private static final int RETRY_MAX_DELAY_MS = 1000;
+    private static final double RETRY_MULTIPLIER = 2;
 
     private final RequestRepository requestRepository;
     private final UserRepository userRepository;
     private final QueueCounterRepository queueCounterRepository;
     private final RequestInternalService internalService;
 
-    // แก้ปัญหา Database lock ไม่ได้/ชน/race condition
     @Retryable(
             retryFor = {
                     DataIntegrityViolationException.class,
                     CannotAcquireLockException.class
             },
-            maxAttempts = 5,
+            maxAttempts = RETRY_MAX_ATTEMPTS,
             backoff = @Backoff(
-                    delay = 50,
-                    multiplier = 2,
-                    maxDelay = 1000
+                    delay = RETRY_INITIAL_DELAY_MS,
+                    multiplier = RETRY_MULTIPLIER,
+                    maxDelay = RETRY_MAX_DELAY_MS
             )
     )
     @Transactional
@@ -50,58 +55,46 @@ public class RequestService {
         );
     }
 
-    // Return value of the method is never used
     public List<Request> getQueue(QueueType type) {
         return requestRepository.findByQueueTypeOrderByRequestOrderAsc(type);
     }
 
-    // Return value of the method is never used
     public List<Request> getQueueByStatus(QueueType type, RequestStatus status) {
         return requestRepository.findByQueueTypeAndStatusOrderByRequestOrderAsc(type, status);
     }
 
     @Transactional
     public void deleteRequest(Long requestId) {
-
-        // หา Request
-        Request request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Request not found"));
+        Request request = requestRepository.findById(requestId).orElse(null);
+        if (request == null) {
+            return;
+        }
 
         User user = request.getUser();
 
-        // ลบ request
-        requestRepository.delete(request);
-
-        // ลด activeRequests ของ user
-        if (user != null) {
+        int deleted = requestRepository.deleteExistingById(requestId);
+        if (deleted > 0 && user != null) {
             user.setActiveRequests(safeDecrement(user.getActiveRequests()));
             userRepository.save(user);
         }
     }
 
-    // แทรก Request ขึ้นหัวคิว
     @Transactional
     public Request insertAtTop(Long userId, String title, String artist, QueueType type) {
 
         User user = userRepository.findById(userId)
                 .orElseThrow();
 
-        int GAP = 1000;
-
-        // lock ทั้งคิวก่อน
-        queueCounterRepository.lockQueue(type);
+        queueCounterRepository.findForUpdate(type);
         List<Request> existing = requestRepository.lockQueue(type);
-        // reorder ใหม่หมด
         for (int i = 0; i < existing.size(); i++) {
-            existing.get(i).setRequestOrder((i + 1) * GAP);
+            existing.get(i).setRequestOrder((i + 1) * QUEUE_GAP);
         }
         requestRepository.saveAll(existing);
-        // ส่งไป Database
         requestRepository.flush();
 
-        // 4. insert ใหม่
         Request request = RequestFactory.create(user, title, artist, type);
-        request.setRequestOrder(GAP/2);
+        request.setRequestOrder(TOP_INSERT_ORDER);
         request.setStatus(RequestStatus.WAITING);
 
         Request saved = requestRepository.save(request);
@@ -112,8 +105,6 @@ public class RequestService {
         return saved;
     }
 
-    // สร้างใหม่จากของเดิม และแทรกไว้ติดที่เก่า
-    // ** ฝากดูความเสี่ยงเรื่อง order แน่นและ อาจต้อง re-balance
     @Transactional
     public Request replaceRequest(Long requestId, String title, String artist) {
 
@@ -129,17 +120,13 @@ public class RequestService {
 
         newRequest.setQueueType(original.getQueueType());
 
-        // 🔥 insert next to original (gap-based)
         newRequest.setRequestOrder(original.getRequestOrder() + 1);
 
         return requestRepository.save(newRequest);
     }
 
-    // ดึงคิวถัดไปออกจากคิว
     @Transactional
     public Request popNext(QueueType type) {
-
-        // ล็อคก่อนทำ
         List<Request> queue = requestRepository.lockQueue(type);
 
         if (queue.isEmpty()) return null;
@@ -180,6 +167,4 @@ public class RequestService {
     private int safeIncrement(Integer value) {
         return (value == null ? 0 : value) + 1;
     }
-
-    // *** ต้อง ensure ว่า lockQueue() ใช้ FOR UPDATE
 }

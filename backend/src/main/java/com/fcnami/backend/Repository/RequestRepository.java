@@ -1,6 +1,5 @@
 package com.fcnami.backend.Repository;
 
-import com.fcnami.backend.Model.QueueRequest.QueueCounter;
 import com.fcnami.backend.Model.QueueRequest.QueueType;
 import com.fcnami.backend.Model.QueueRequest.Request;
 import com.fcnami.backend.Model.QueueRequest.RequestStatus;
@@ -15,27 +14,17 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RequestRepository extends JpaRepository<Request, Long> {
-
-    // =========================
-    // BASIC QUERY (READ ONLY)
-    // =========================
-
-    // ดู History ของ User
     List<Request> findByUser_IdOrderByCreatedAtAsc(Long userId);
 
-    // หา YoutubeID
     List<Request> findByRequesterId(String requesterId);
 
-    // Queue เรียงตาม order จริง
     List<Request> findByQueueTypeOrderByRequestOrderAsc(QueueType queueType);
 
-    // แบ่งตาม QueueType + Status
     List<Request> findByQueueTypeAndStatusOrderByRequestOrderAsc(
             QueueType queueType,
             RequestStatus status
     );
 
-    // กันซ้ำ
     Optional<Request> findByNormalizedKey(String normalizedKey);
 
     boolean existsByNormalizedKey(String normalizedKey);
@@ -44,21 +33,13 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
 
     List<Request> findByStatus(RequestStatus status);
 
-    // No Usage
-    List<Request> findByReplacedRequest(Request request);
-
     List<Request> findByReplacedRequest_Id(Long requestId);
 
-    // =========================
-    // POP / NEXT (SAFE READ)
-    // =========================
+    @Modifying
+    @Query("DELETE FROM Request r WHERE r.id = :id")
+    int deleteExistingById(@Param("id") Long id);
 
     Optional<Request> findTopByQueueTypeOrderByRequestOrderAsc(QueueType type);
-
-    // =========================
-    // GAP-BASED ORDER HELPERS
-    // (OPTION A CORE IDEA)
-    // =========================
 
     @Query("""
         SELECT MIN(r.requestOrder)
@@ -73,33 +54,6 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
         WHERE r.queueType = :type
     """)
     Integer findMaxOrder(@Param("type") QueueType type);
-
-    // =========================
-    // OPTIONAL: SIMPLE CLEANUP (NO SHIFT)
-    // =========================
-    // ❌ ไม่มี decrement/increment bulk อีกแล้ว
-    // เพราะ Option A ไม่ใช้ reorder system
-
-    // =========================
-    // OPTIONAL: COUNTER TABLE (ONLY IF YOU STILL NEED SEQUENCE)
-    // =========================
-
-    // Unable to resolve table
-    // ขึ้นแดงของ IntelliJ น่าจะเพราะผูกกับ MySQL แนะนำให้ใช้ Database เป็น MySQL หรือ ลบทิ้งหากไม่ใช้งาน
-    @Modifying
-    @Query(value = """
-        UPDATE queue_counter
-        SET last_order = LAST_INSERT_ID(last_order + 1)
-        WHERE queue_type = :type
-    """, nativeQuery = true)
-    void incrementCounter(@Param("type") String type);
-
-    @Query(value = "SELECT LAST_INSERT_ID()", nativeQuery = true)
-    Integer getLastOrder();
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT q FROM QueueCounter q WHERE q.queueType = :type")
-    QueueCounter findForUpdate(@Param("type") QueueType type);
 
     @Modifying
     @Query("""
@@ -133,8 +87,6 @@ SET r.request_order = x.new_order
     void normalize(@Param("type") String type,
                    @Param("gap") int gap);
 
-
-    // lock ทั้ง queue ใช้ตาม reorder / normalize
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
     SELECT r FROM Request r

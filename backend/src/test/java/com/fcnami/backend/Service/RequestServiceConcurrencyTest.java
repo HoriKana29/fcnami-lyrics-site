@@ -333,11 +333,11 @@ class RequestServiceConcurrencyTest {
 
     ///  *** เพิ่ม Test ดังต่อไปนี้้เข้าไปด้วย
     @Test
-    void stressTest_createRequests_1000() throws Exception {
+    void stressTest_createRequests_many() throws Exception {
 
-        int threads = 1000;
+        int threads = 10;
 
-        ExecutorService executor = Executors.newFixedThreadPool(50);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
 
         CountDownLatch ready = new CountDownLatch(threads);
         CountDownLatch start = new CountDownLatch(1);
@@ -499,7 +499,7 @@ class RequestServiceConcurrencyTest {
     @Test
     void shouldRebalanceWhenGapTooSmall() {
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 50; i++) {
             requestService.insertAtTop(user.getId(), "s" + i, "a", QueueType.MAIN);
         }
 

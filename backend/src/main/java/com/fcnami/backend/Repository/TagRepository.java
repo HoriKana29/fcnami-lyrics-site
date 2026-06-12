@@ -11,8 +11,6 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
     Optional<Tag> findByNormalizedName(String normalizedName);
     boolean existsByNormalizedName(String normalizedName);
 
-    // Type Filter
-    // UI อาจเรียงมั่ว ได้นะ
     List<Tag> findByType(TagType type);
 
     List<Tag> findByNameContainingIgnoreCase(String name);

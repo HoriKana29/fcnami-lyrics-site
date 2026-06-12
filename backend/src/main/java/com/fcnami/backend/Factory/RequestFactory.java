@@ -4,6 +4,7 @@ import com.fcnami.backend.Model.QueueRequest.QueueType;
 import com.fcnami.backend.Model.QueueRequest.Request;
 import com.fcnami.backend.Model.QueueRequest.RequestStatus;
 import com.fcnami.backend.Model.User;
+import com.fcnami.backend.Support.SlugUtil;
 
 import java.util.UUID;
 
@@ -31,12 +32,10 @@ public class RequestFactory {
         return r;
     }
 
-    // Simple creation
     public static Request create(User user, String songTitle, String artist) {
         return createBase(user, songTitle, artist);
     }
 
-    // With queue assignment
     public static Request create(User user, String songTitle, String artist, QueueType type) {
         Request r = createBase(user, songTitle, artist);
         r.setQueueType(type);
@@ -53,13 +52,7 @@ public class RequestFactory {
         return "req_" + UUID.randomUUID();
     }
 
-    //"Brave-Shine"
-    //"Brave Shine"
-    // อาจไม่เท่ากัน
     private static String generateNormalizedKey(String title, String artist) {
-        return (title + "_" + artist)
-                .toLowerCase()
-                .trim()
-                .replaceAll("\\s+", "_");
+        return SlugUtil.normalizedKey(title, artist);
     }
 }

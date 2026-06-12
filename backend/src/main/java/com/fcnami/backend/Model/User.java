@@ -12,17 +12,12 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-
-// Entity สำหรับ "ผู้ใช้ที่ขอเพลง"
-// ใช้แทน YouTube user)
 @Entity
 @Table(name = "users",
         indexes = {
-                // ใช้ค้นหาจาก userIdentifier
                 @Index(name = "idx_user_identifier",
                         columnList = "userIdentifier")
         })
-// แสดงว่าใช้ id ในการเปรียบเทียบเท่านั้น
 @EqualsAndHashCode(of = "id")
 public class User {
 
@@ -32,22 +27,20 @@ public class User {
 
     @Column(nullable = false, unique = true)
     private String userIdentifier;
-    // YouTube Channel ID
 
     @Column(nullable = false)
-    private String username; // display name
+    private String username;
 
-    private String email; // optional
+    private String email;
 
-    // จำนวน request ทั้งหมดที่เคยส่ง(เดี๋ยวจะให้ไปไล่เช็คใน Youtube ช่องเราอีกครั้ง)
     @Builder.Default
     private Integer totalRequests = 0;
 
-    // จำนวน Request ที่อยู่ในคิว
     @Builder.Default
     private Integer activeRequests = 0;
 
-    // Request's Bond
+    private Integer maxRequests;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL,
              fetch = FetchType.LAZY)
     private Set<Request> requests;
