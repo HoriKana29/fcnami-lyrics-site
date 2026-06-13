@@ -22,7 +22,7 @@ public class YouTubeSyncService {
     @Value("${fcnami.youtube.api-key:}")
     private String apiKey;
 
-    @Value("${fcnami.youtube.channel-id:UC8x9Wn-jK6m8l-n3rW-G6Aw}")
+    @Value("${fcnami.youtube.channel-id:UC8P0dc0Zn2gf8L6tJi_k6xg}")
     private String channelId;
 
     /**
@@ -37,8 +37,12 @@ public class YouTubeSyncService {
         }
 
         try {
-            RestClient restClient = restClientBuilder.baseUrl("https://www.googleapis.com/youtube/v3").build();
+            RestClient restClient = restClientBuilder
+                    .baseUrl("https://www.googleapis.com/youtube/v3")
+                    .defaultHeader("Referer", "http://localhost:8080")
+                    .build();
 
+            log.info("Starting YouTube sync for channel: {} using provided API key", channelId);
             // 1. Get uploads playlist ID
             Map channelResponse = restClient.get()
                     .uri(uriBuilder -> uriBuilder
@@ -50,8 +54,16 @@ public class YouTubeSyncService {
                     .retrieve()
                     .body(Map.class);
 
+            if (channelResponse == null || !channelResponse.containsKey("items")) {
+                log.error("Invalid response from YouTube API for channel ID: {}", channelId);
+                return 0;
+            }
+
             List items = (List) channelResponse.get("items");
-            if (items == null || items.isEmpty()) return 0;
+            if (items == null || items.isEmpty()) {
+                log.warn("No channel found with ID: {}", channelId);
+                return 0;
+            }
 
             String uploadsPlaylistId = (String) ((Map) ((Map) ((Map) items.get(0)).get("contentDetails")).get("relatedPlaylists")).get("uploads");
 
@@ -105,7 +117,7 @@ public class YouTubeSyncService {
             return count;
         } catch (Exception e) {
             log.error("Failed to sync YouTube videos", e);
-            return 0;
+            throw new RuntimeException("YouTube sync failed: " + e.getMessage(), e);
         }
     }
 

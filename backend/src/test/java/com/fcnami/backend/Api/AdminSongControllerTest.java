@@ -5,6 +5,7 @@ import com.fcnami.backend.Api.SongDtos.SongResponse;
 import com.fcnami.backend.Api.SongDtos.SongUpsertRequest;
 import com.fcnami.backend.Model.SongTags.SongStatus;
 import com.fcnami.backend.Service.SongCatalogService;
+import com.fcnami.backend.Service.YouTubeSyncService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AdminSongControllerTest {
     @Mock
     private SongCatalogService songCatalogService;
+    @Mock
+    private YouTubeSyncService youTubeSyncService;
 
     private LocalValidatorFactoryBean validator;
     private MockMvc mockMvc;
@@ -40,7 +43,7 @@ class AdminSongControllerTest {
         validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AdminSongController(songCatalogService))
+                .standaloneSetup(new AdminSongController(songCatalogService, youTubeSyncService))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setValidator(validator)
                 .build();

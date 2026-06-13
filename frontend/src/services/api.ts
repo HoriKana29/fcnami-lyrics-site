@@ -16,6 +16,11 @@ export const songService = {
     const response = await api.get<SongResponse>(`/songs/${slug}`);
     return response.data;
   },
+  syncYouTube: async () => {
+    // Note: This calls the admin endpoint. In a real app, this would need auth.
+    const response = await api.post<{ syncedCount: number; message: string }>('/admin/songs/sync');
+    return response.data;
+  },
 };
 
 export default api;

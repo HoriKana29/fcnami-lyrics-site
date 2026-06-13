@@ -16,6 +16,7 @@ const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [songs, setSongs] = useState<SongResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
   // State for manual overrides
@@ -37,19 +38,38 @@ const SearchPage = () => {
     else setActiveFilter('all');
   }, [searchParams]);
 
+  const fetchSongs = async () => {
+    try {
+      setLoading(true);
+      const data = await songService.getSongs(searchTerm);
+      setSongs(data.content);
+    } catch (error) {
+      console.error('Failed to search songs', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchSongs = async () => {
+    const performInitialSync = async () => {
       try {
-        setLoading(true);
-        const data = await songService.getSongs(searchTerm);
-        setSongs(data.content);
+        setSyncing(true);
+        // Only sync if no search term or explicitly needed
+        // For demo/prototype, we sync once on mount
+        await songService.syncYouTube();
+        await fetchSongs();
       } catch (error) {
-        console.error('Failed to search songs', error);
+        console.error('Failed to sync YouTube videos', error);
+        await fetchSongs();
       } finally {
-        setLoading(false);
+        setSyncing(false);
       }
     };
 
+    performInitialSync();
+  }, []);
+
+  useEffect(() => {
     const debounce = setTimeout(fetchSongs, 300);
     return () => clearTimeout(debounce);
   }, [searchTerm]);
@@ -78,10 +98,14 @@ const SearchPage = () => {
       if (activeSort === 'title') {
         return a.title.localeCompare(b.title);
       }
+      
+      const dateA = new Date(a.publishedAt || a.createdAt).getTime();
+      const dateB = new Date(b.publishedAt || b.createdAt).getTime();
+      
       if (activeSort === 'oldest') {
-        return a.id - b.id;
+        return dateA - dateB;
       }
-      return b.id - a.id;
+      return dateB - dateA;
     });
 
     return result;
@@ -120,9 +144,16 @@ const SearchPage = () => {
             <Link to="/songs" className="inline-flex items-center gap-2 text-slate-400 hover:text-[#ff8c00] font-bold text-sm uppercase tracking-widest mb-6 transition-colors group">
               <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> Back to Categories
             </Link>
-            <h1 className="text-5xl md:text-7xl font-black tracking-tighter leading-none mb-4">
-              <span className="text-[#ef6c00]">{getPageTitle()}</span>
-            </h1>
+            <div className="flex items-end justify-between gap-4 mb-4">
+              <h1 className="text-5xl md:text-7xl font-black tracking-tighter leading-none">
+                <span className="text-[#ef6c00]">{getPageTitle()}</span>
+              </h1>
+              {syncing && (
+                <div className="flex items-center gap-2 text-[#ff8c00] font-bold text-xs uppercase tracking-widest animate-pulse">
+                  <Loader2 className="animate-spin" size={14} /> Syncing
+                </div>
+              )}
+            </div>
             <p className="text-slate-400 font-medium italic">
               Showing {processedSongs.length} translations found for you
             </p>
@@ -221,66 +252,85 @@ const SearchPage = () => {
                   </button>
                 ))}
               </div>
-              {selectedTags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-1">
-                   {selectedTags.map(tag => (
-                     <span key={tag} className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold">
-                        {tag}
-                        <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => toggleTag(tag)} />
-                     </span>
-                   ))}
-                </div>
-              )}
             </div>
           </div>
 
           {/* Results List */}
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-            {loading ? (
+            {loading && !syncing ? (
               <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <Loader2 className="animate-spin text-[#ff8c00]" size={48} />
-                <p className="text-slate-400 font-bold animate-pulse">Syncing with YouTube...</p>
+                <p className="text-slate-400 font-bold animate-pulse">Loading songs...</p>
               </div>
             ) : processedSongs.length > 0 ? (
-              <div className="grid gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {processedSongs.map((song) => (
                   <Link
                     key={song.id}
                     to={`/songs/${song.slug}`}
-                    className="flex items-center justify-between p-6 bg-slate-50/50 hover:bg-white border-2 border-transparent hover:border-[#ff8c00]/20 rounded-[1.5rem] transition-all group hover:shadow-lg hover:shadow-orange-100/50"
+                    className="flex flex-col bg-white border-2 border-slate-50 hover:border-[#ff8c00]/20 rounded-[2.5rem] transition-all group hover:shadow-2xl hover:shadow-orange-100/30 overflow-hidden"
                   >
-                    <div className="flex items-center gap-6">
-                      <div className="relative">
-                        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-300 border border-slate-100 group-hover:text-[#ff8c00] group-hover:border-[#ff8c00]/20 transition-all shadow-sm">
-                          <Music size={28} />
+                    <div className="relative aspect-video overflow-hidden">
+                      {song.thumbnailUrl ? (
+                        <img 
+                          src={song.thumbnailUrl} 
+                          alt={song.title}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300">
+                          <Music size={48} />
                         </div>
-                        {song.status === 'PUBLISHED' && (
-                          <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 border-4 border-white rounded-full" />
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-black text-slate-900 leading-tight group-hover:text-[#ef6c00] transition-colors">
-                          {song.title}
-                        </h3>
-                        <div className="flex items-center gap-3 mt-1">
-                           <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">{song.artist}</span>
-                           <span className="w-1 h-1 bg-slate-200 rounded-full" />
-                           <span className="text-[#ff8c00] font-bold text-xs uppercase tracking-widest">{song.sourceAnimeOrGame}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      {activeSort === 'views' && (
-                         <span className="bg-orange-100 text-[#ef6c00] px-3 py-1 rounded-full text-xs font-black uppercase tracking-tighter">
-                            {Math.floor(Math.random() * 5000) + 500} views
-                         </span>
                       )}
-                      <div className="hidden sm:flex w-10 h-10 rounded-full bg-white border border-slate-100 items-center justify-center text-slate-200 group-hover:border-[#ff8c00]/30 group-hover:text-[#ff8c00] transition-all">
-                        <ChevronRight size={20} />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-6">
+                         <span className="text-white font-black text-sm uppercase tracking-widest flex items-center gap-2">
+                           View Lyrics <ChevronRight size={16} />
+                         </span>
+                      </div>
+                      {song.status === 'PUBLISHED' && (
+                        <div className="absolute top-4 right-4 bg-green-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg uppercase tracking-tighter">
+                          Published
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-6 flex flex-col flex-1">
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                         {song.tags?.slice(0, 2).map(tag => (
+                           <span key={tag} className="text-[9px] font-black uppercase tracking-tighter bg-slate-50 text-slate-400 px-2 py-0.5 rounded-md">
+                             {tag}
+                           </span>
+                         ))}
+                      </div>
+                      
+                      <h3 className="text-xl font-black text-slate-900 leading-tight group-hover:text-[#ef6c00] transition-colors line-clamp-2 mb-2">
+                        {song.title}
+                      </h3>
+                      
+                      <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-50">
+                        <div className="flex flex-col">
+                           <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest truncate max-w-[120px]">
+                             {song.artist}
+                           </span>
+                           <span className="text-[#ff8c00] font-black text-[10px] uppercase tracking-widest truncate max-w-[120px]">
+                             {song.sourceAnimeOrGame}
+                           </span>
+                        </div>
+                        <div className="w-10 h-10 rounded-2xl bg-slate-50 text-slate-300 group-hover:bg-[#ff8c00] group-hover:text-white transition-all flex items-center justify-center shadow-inner group-hover:shadow-lg group-hover:shadow-orange-200">
+                          <Music size={20} />
+                        </div>
                       </div>
                     </div>
                   </Link>
                 ))}
+              </div>
+            ) : syncing ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="animate-spin text-[#ff8c00]" size={48} />
+                <p className="text-slate-400 font-bold animate-pulse text-center">
+                  Fetching latest videos from FCNami T_T...<br/>
+                  <span className="text-xs font-medium italic">Please wait while we sync the catalog</span>
+                </p>
               </div>
             ) : (
               <div className="text-center py-20 px-10 bg-slate-50/50 rounded-[3rem] border-2 border-dashed border-slate-100 flex flex-col items-center">

@@ -1,5 +1,8 @@
 package com.fcnami.backend.Api;
 
+import com.fcnami.backend.Api.SongDtos.SongResponse;
+import com.fcnami.backend.Api.SongDtos.SongUpsertRequest;
+import com.fcnami.backend.Service.SongCatalogService;
 import com.fcnami.backend.Service.YouTubeSyncService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
