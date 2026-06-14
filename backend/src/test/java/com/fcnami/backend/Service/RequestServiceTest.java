@@ -84,10 +84,11 @@ class RequestServiceTest {
         Request req = TestFactory.createRequest(user, QueueType.MAIN, 2);
 
         when(requestRepository.findById(1L)).thenReturn(Optional.of(req));
+        when(requestRepository.deleteExistingById(1L)).thenReturn(1);
 
         requestService.deleteRequest(1L);
 
-        verify(requestRepository).delete(req);
+        verify(requestRepository).deleteExistingById(1L);
         verify(userRepository).save(user);
         assertEquals(1, user.getActiveRequests());
     }
@@ -99,6 +100,7 @@ class RequestServiceTest {
         req.setUser(null);
 
         when(requestRepository.findById(1L)).thenReturn(Optional.of(req));
+        when(requestRepository.deleteExistingById(1L)).thenReturn(1);
 
         requestService.deleteRequest(1L);
 
@@ -121,7 +123,7 @@ class RequestServiceTest {
 
         assertNotNull(result);
         assertEquals(RequestStatus.WAITING, result.getStatus());
-        verify(queueCounterRepository).lockQueue(QueueType.MAIN);
+        verify(queueCounterRepository).findForUpdate(QueueType.MAIN);
         verify(requestRepository).lockQueue(QueueType.MAIN);
         verify(requestRepository).saveAll(List.of());
         verify(requestRepository).flush();

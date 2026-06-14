@@ -27,19 +27,20 @@ public class User {
 
     @Column(nullable = false, unique = true)
     private String userIdentifier;
-    // YouTube Channel ID
 
     @Column(nullable = false)
-    private String username; // display name
+    private String username;
 
-    private String email; // optional
+    private String email;
 
     @Builder.Default
     private Integer totalRequests = 0;
+
     @Builder.Default
     private Integer activeRequests = 0;
 
-    // Request's Bond
+    private Integer maxRequests;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL,
              fetch = FetchType.LAZY)
     private Set<Request> requests;

@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "lyrics")
 public class Lyrics {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

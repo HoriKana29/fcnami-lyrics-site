@@ -1,6 +1,7 @@
 package com.fcnami.backend.Model.SongTags;
 
 public enum SongStatus {
+
     DRAFT,
     IDEA,
     TRANSLATING,

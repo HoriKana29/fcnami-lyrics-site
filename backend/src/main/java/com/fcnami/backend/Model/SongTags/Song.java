@@ -32,18 +32,25 @@ public class Song {
 
     @Column(nullable = false)
     private String title;
+
     private String titleJapanese;
+
     @Column(nullable = false)
     private String artist;
-    @Column(nullable = false,unique = true)
+
+    @Column(nullable = false, unique = true)
     private String normalizedKey;
+
     @Column(nullable = false)
     private String slug;
+
     private String sourceAnimeOrGame;
+
     private String youtubeUrl;
     private String youtubeVideoId;
     private String thumbnailUrl;
 
+    // Legacy inline lyrics kept for older rows; new writes use the Lyrics entity.
     @Column(columnDefinition = "TEXT")
     private String kanjiLyrics;
 
@@ -80,9 +87,11 @@ public class Song {
         if (slug == null || slug.isBlank()) {
             slug = SlugUtil.slugify(title + "-" + artist);
         }
+
         if (normalizedKey == null || normalizedKey.isBlank()) {
             normalizedKey = SlugUtil.normalizedKey(title, artist);
         }
+
         createdAt = LocalDateTime.now();
         updatedAt = createdAt;
     }

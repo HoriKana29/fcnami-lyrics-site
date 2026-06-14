@@ -331,56 +331,202 @@ class RequestServiceConcurrencyTest {
         }
     }
 
-//    @Test
-//    void stressTest_createRequests_1000() throws Exception {
-//
-//        int threads = 1000;
-//
-//        ExecutorService executor = Executors.newFixedThreadPool(50);
-//
-//        CountDownLatch ready = new CountDownLatch(threads);
-//        CountDownLatch start = new CountDownLatch(1);
-//
-//        List<Future<?>> futures = new ArrayList<>();
-//
-//        for (int i = 0; i < threads; i++) {
-//            int index = i;
-//
-//            futures.add(executor.submit(() -> {
-//                ready.countDown();
-//                start.await();
-//
-//                requestService.createRequest(
-//                        user.getId(),
-//                        "song_" + index,
-//                        "artist",
-//                        QueueType.MAIN
-//                );
-//
-//                return null;
-//            }));
-//        }
-//
-//        ready.await();
-//        start.countDown();
-//
-//        for (Future<?> f : futures) {
-//            f.get();
-//        }
-//
-//        executor.shutdown();
-//        executor.awaitTermination(30, TimeUnit.SECONDS);
-//
-//        List<Request> list =
-//                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
-//
-//        assertEquals(threads, list.size());
-//
-//        // validate uniqueness
-//        Set<Integer> orders = new HashSet<>();
-//        for (Request r : list) {
-//            assertTrue(orders.add(r.getRequestOrder()));
-//            assertTrue(r.getRequestOrder() >= 1000);
-//        }
-//    }
+    ///  *** เพิ่ม Test ดังต่อไปนี้้เข้าไปด้วย
+    @Test
+    void stressTest_createRequests_many() throws Exception {
+
+        int threads = 10;
+
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+
+        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch start = new CountDownLatch(1);
+
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int i = 0; i < threads; i++) {
+            int index = i;
+
+            futures.add(executor.submit(() -> {
+                ready.countDown();
+                start.await();
+
+                requestService.createRequest(
+                        user.getId(),
+                        "song_" + index,
+                        "artist",
+                        QueueType.MAIN
+                );
+
+                return null;
+            }));
+        }
+
+        ready.await();
+        start.countDown();
+
+        for (Future<?> f : futures) {
+            f.get();
+        }
+
+        executor.shutdown();
+        executor.awaitTermination(30, TimeUnit.SECONDS);
+
+        List<Request> list =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        assertEquals(threads, list.size());
+
+        // validate uniqueness
+        Set<Integer> orders = new HashSet<>();
+        for (Request r : list) {
+            assertTrue(orders.add(r.getRequestOrder()));
+            assertTrue(r.getRequestOrder() >= 1000);
+        }
+    }
+
+    @Test
+    void shouldNotExceedUserLimit_underConcurrency() throws Exception {
+
+        user.setMaxRequests(3);
+        userRepository.save(user);
+
+        int threads = 10;
+
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+
+        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch start = new CountDownLatch(1);
+
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int i = 0; i < threads; i++) {
+            futures.add(executor.submit(() -> {
+                ready.countDown();
+                start.await();
+
+                try {
+                    requestService.createRequest(
+                            user.getId(),
+                            "song",
+                            "artist",
+                            QueueType.MAIN
+                    );
+                } catch (Exception ignored) {}
+
+                return null;
+            }));
+        }
+
+        ready.await();
+        start.countDown();
+
+        for (Future<?> f : futures) f.get();
+
+        executor.shutdown();
+
+        List<Request> list =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        assertTrue(list.size() <= 3);
+    }
+
+    @Test
+    void shouldHandleConcurrentDeleteSameRequest() throws Exception {
+
+        Request req = requestService.createRequest(
+                user.getId(), "song", "a", QueueType.MAIN
+        );
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<?> f1 = executor.submit(() -> {
+            ready.countDown();
+            start.await();
+            requestService.deleteRequest(req.getId());
+            return null;
+        });
+
+        Future<?> f2 = executor.submit(() -> {
+            ready.countDown();
+            start.await();
+            requestService.deleteRequest(req.getId());
+            return null;
+        });
+
+        ready.await();
+        start.countDown();
+
+        f1.get();
+        f2.get();
+
+        executor.shutdown();
+
+        List<Request> list = requestRepository.findAll();
+
+        assertTrue(list.isEmpty());
+    }
+
+    @Test
+    void shouldNotMixOrderBetweenQueueTypes() throws Exception {
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        Future<?> f1 = executor.submit(() ->
+                requestService.createRequest(user.getId(), "A", "a", QueueType.MAIN)
+        );
+
+        Future<?> f2 = executor.submit(() ->
+                requestService.createRequest(user.getId(), "B", "a", QueueType.RESERVE)
+        );
+
+        f1.get();
+        f2.get();
+
+        List<Request> main =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        List<Request> reserve =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.RESERVE);
+
+        assertEquals(1, main.size());
+        assertEquals(1, reserve.size());
+    }
+
+    @Test
+    void shouldRebalanceWhenGapTooSmall() {
+
+        for (int i = 0; i < 50; i++) {
+            requestService.insertAtTop(user.getId(), "s" + i, "a", QueueType.MAIN);
+        }
+
+        List<Request> list =
+                requestRepository.findByQueueTypeOrderByRequestOrderAsc(QueueType.MAIN);
+
+        Set<Integer> orders = new HashSet<>();
+
+        for (Request r : list) {
+            assertTrue(orders.add(r.getRequestOrder()));
+        }
+    }
+
+    @Test
+    void shouldRollback_whenCreateFails() {
+
+        assertThrows(Exception.class, () -> {
+            requestService.createRequest(
+                    user.getId(),
+                    null, // force error
+                    "artist",
+                    QueueType.MAIN
+            );
+        });
+
+        List<Request> list = requestRepository.findAll();
+
+        assertTrue(list.isEmpty());
+    }
 }

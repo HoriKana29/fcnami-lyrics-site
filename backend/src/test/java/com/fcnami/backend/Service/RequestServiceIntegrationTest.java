@@ -130,12 +130,8 @@ public class RequestServiceIntegrationTest {
 
     // delete request ที่ “ไม่มีอยู่”
     @Test
-    void shouldThrow_whenDeleteNonExistentRequest() {
-        RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                requestService.deleteRequest(999L)
-        );
-
-        assertEquals("Request not found", ex.getMessage());
+    void shouldIgnore_whenDeleteNonExistentRequest() {
+        assertDoesNotThrow(() -> requestService.deleteRequest(999L));
     }
 
     @Test

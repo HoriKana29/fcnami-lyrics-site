@@ -21,6 +21,12 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class RequestService {
+    private static final int QUEUE_GAP = 1000;
+    private static final int TOP_INSERT_ORDER = QUEUE_GAP / 2;
+    private static final int RETRY_MAX_ATTEMPTS = 5;
+    private static final int RETRY_INITIAL_DELAY_MS = 50;
+    private static final int RETRY_MAX_DELAY_MS = 1000;
+    private static final double RETRY_MULTIPLIER = 2;
 
     private final RequestRepository requestRepository;
     private final UserRepository userRepository;
@@ -32,11 +38,11 @@ public class RequestService {
                     DataIntegrityViolationException.class,
                     CannotAcquireLockException.class
             },
-            maxAttempts = 5,
+            maxAttempts = RETRY_MAX_ATTEMPTS,
             backoff = @Backoff(
-                    delay = 50,
-                    multiplier = 2,
-                    maxDelay = 1000
+                    delay = RETRY_INITIAL_DELAY_MS,
+                    multiplier = RETRY_MULTIPLIER,
+                    maxDelay = RETRY_MAX_DELAY_MS
             )
     )
     @Transactional
@@ -59,15 +65,15 @@ public class RequestService {
 
     @Transactional
     public void deleteRequest(Long requestId) {
-
-        Request request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Request not found"));
+        Request request = requestRepository.findById(requestId).orElse(null);
+        if (request == null) {
+            return;
+        }
 
         User user = request.getUser();
 
-        requestRepository.delete(request);
-
-        if (user != null) {
+        int deleted = requestRepository.deleteExistingById(requestId);
+        if (deleted > 0 && user != null) {
             user.setActiveRequests(safeDecrement(user.getActiveRequests()));
             userRepository.save(user);
         }
@@ -79,19 +85,16 @@ public class RequestService {
         User user = userRepository.findById(userId)
                 .orElseThrow();
 
-        int GAP = 1000;
-
-        queueCounterRepository.lockQueue(type);
+        queueCounterRepository.findForUpdate(type);
         List<Request> existing = requestRepository.lockQueue(type);
         for (int i = 0; i < existing.size(); i++) {
-            existing.get(i).setRequestOrder((i + 1) * GAP);
+            existing.get(i).setRequestOrder((i + 1) * QUEUE_GAP);
         }
         requestRepository.saveAll(existing);
         requestRepository.flush();
 
-        // 4. insert ใหม่
         Request request = RequestFactory.create(user, title, artist, type);
-        request.setRequestOrder(GAP/2);
+        request.setRequestOrder(TOP_INSERT_ORDER);
         request.setStatus(RequestStatus.WAITING);
 
         Request saved = requestRepository.save(request);
@@ -117,7 +120,6 @@ public class RequestService {
 
         newRequest.setQueueType(original.getQueueType());
 
-        // 🔥 insert next to original (gap-based)
         newRequest.setRequestOrder(original.getRequestOrder() + 1);
 
         return requestRepository.save(newRequest);
@@ -125,7 +127,6 @@ public class RequestService {
 
     @Transactional
     public Request popNext(QueueType type) {
-
         List<Request> queue = requestRepository.lockQueue(type);
 
         if (queue.isEmpty()) return null;
@@ -166,5 +167,4 @@ public class RequestService {
     private int safeIncrement(Integer value) {
         return (value == null ? 0 : value) + 1;
     }
-
 }
