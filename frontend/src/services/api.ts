@@ -12,7 +12,16 @@ export const songService = {
     });
     return response.data;
   },
+
+  getYouTubeSongs: async (playlistId?: string, refresh = false) => {
+    const response = await api.get<SongResponse[]>('/songs/youtube-direct', {
+      params: { playlistId, refresh },
+    });
+    return response.data;
+  },
+
   getSongBySlug: async (slug: string) => {
+
     const response = await api.get<SongResponse>(`/songs/${slug}`);
     return response.data;
   },

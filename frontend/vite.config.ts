@@ -14,6 +14,13 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
+        timeout: 60000, // 60 seconds
+        proxyTimeout: 60000,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('proxy error', err);
+          });
+        },
       },
     },
   },

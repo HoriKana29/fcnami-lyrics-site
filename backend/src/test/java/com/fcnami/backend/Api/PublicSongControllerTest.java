@@ -34,13 +34,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PublicSongControllerTest {
     @Mock
     private SongCatalogService songCatalogService;
+    @Mock
+    private com.fcnami.backend.Service.YouTubeSyncService youTubeSyncService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new PublicSongController(songCatalogService))
+                .standaloneSetup(new PublicSongController(songCatalogService, youTubeSyncService))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .build();
@@ -116,6 +118,7 @@ class PublicSongControllerTest {
                 null,
                 null,
                 null,
+                0L,
                 null
         );
     }

@@ -5,6 +5,7 @@ import { songService } from '@/services/api';
 import { SongResponse } from '@/types';
 import Navbar from '@/components/layout/Navbar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { parseSongTitle } from '@/lib/songParser';
 
 const SongDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -43,6 +44,8 @@ const SongDetailPage = () => {
 
   if (!song) return null;
 
+  const parsed = parseSongTitle(song.title);
+
   return (
     <div className="bg-white min-h-screen">
       <Navbar />
@@ -67,12 +70,20 @@ const SongDetailPage = () => {
             </div>
 
             <h1 className="text-4xl md:text-6xl font-black tracking-tighter leading-tight mb-4">
-              <span className="text-slate-900">{song.title}</span>
+              <span className="text-slate-900">{parsed.title}</span>
             </h1>
-            <div className="flex items-center gap-4 text-xl font-bold">
-               <span className="text-[#ff8c00] uppercase tracking-wide">{song.artist}</span>
-               <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
-               <span className="text-slate-400 uppercase tracking-wide">{song.sourceAnimeOrGame}</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xl font-bold">
+               <span className="text-[#ff8c00] text-2xl md:text-3xl font-black uppercase tracking-tight">
+                 {parsed.coveredBy ? `Cover by ${parsed.coveredBy}` : (parsed.artist && parsed.artist !== 'FCNami T_T' ? parsed.artist : song.artist)}
+               </span>
+               {(parsed.source || (song.sourceAnimeOrGame && song.sourceAnimeOrGame !== 'YouTube')) && (
+                 <>
+                   <span className="hidden md:block w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                   <span className="text-slate-400 uppercase tracking-wide">
+                     {parsed.source || song.sourceAnimeOrGame}
+                   </span>
+                 </>
+               )}
             </div>
           </header>
 
@@ -82,7 +93,7 @@ const SongDetailPage = () => {
                width="100%"
                height="100%"
                src={`https://www.youtube.com/embed/${song.youtubeVideoId}?autoplay=0`}
-               title={song.title}
+               title={parsed.title}
                frameBorder="0"
                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                allowFullScreen

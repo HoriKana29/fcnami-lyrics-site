@@ -8,11 +8,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * PublicSongController provides public REST endpoints for searching and retrieving song information.
@@ -28,18 +29,39 @@ public class PublicSongController {
     public static final int DEFAULT_PAGE_SIZE = 20;
 
     private final SongCatalogService songCatalogService;
+    private final com.fcnami.backend.Service.YouTubeSyncService youTubeSyncService;
 
     /**
-     * Constructs a PublicSongController with the required SongCatalogService.
+     * Constructs a PublicSongController with the required services.
      *
-     * Precondition: songCatalogService must not be null.
+     * Precondition: services must not be null.
      * Postcondition: A new PublicSongController instance is successfully created.
      * Side-effect: None.
-     *
-     * @param songCatalogService the service used to retrieve public songs
      */
-    public PublicSongController(SongCatalogService songCatalogService) {
+    public PublicSongController(SongCatalogService songCatalogService, com.fcnami.backend.Service.YouTubeSyncService youTubeSyncService) {
         this.songCatalogService = songCatalogService;
+        this.youTubeSyncService = youTubeSyncService;
+    }
+
+    /**
+     * Lists songs directly from YouTube API, bypassing the local database.
+     * Precondition: None.
+     * Postcondition: Returns the current state of the YouTube playlist.
+     */
+    @GetMapping("/youtube-direct")
+    public ResponseEntity<?> listDirect(
+            @RequestParam(required = false) String playlistId,
+            @RequestParam(defaultValue = "false") boolean refresh) {
+        try {
+            List<SongResponse> results = youTubeSyncService.fetchDirectFromYouTube(playlistId, refresh);
+            return ResponseEntity.ok(results);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Configuration Error", "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", "YouTube Sync Failed", "message", e.getMessage()));
+        }
     }
 
     /**
@@ -58,7 +80,7 @@ public class PublicSongController {
     public PageResponse<SongResponse> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) SongStatus status,
-            @PageableDefault(size = DEFAULT_PAGE_SIZE, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = DEFAULT_PAGE_SIZE, sort = "publishedAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         Page<SongResponse> songs = songCatalogService.listPublicSongs(search, status, pageable);
         return new PageResponse<>(

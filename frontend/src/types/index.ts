@@ -21,6 +21,10 @@ export interface SongResponse {
   status: 'DRAFT' | 'TRANSLATED' | 'PUBLISHED' | 'ARCHIVED';
   tags: string[];
   moods: string[];
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string;
+  viewCount?: number;
   lyrics: LyricsResponse;
 }
 
@@ -29,4 +33,5 @@ export interface LyricsResponse {
   romaji: string;
   thai: string;
   notes: string;
+  updatedAt: string;
 }

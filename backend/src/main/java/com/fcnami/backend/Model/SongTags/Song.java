@@ -82,6 +82,8 @@ public class Song {
     private LocalDateTime updatedAt;
     private LocalDateTime publishedAt;
 
+    private Long viewCount;
+
     @PrePersist
     protected void onCreate() {
         if (slug == null || slug.isBlank()) {

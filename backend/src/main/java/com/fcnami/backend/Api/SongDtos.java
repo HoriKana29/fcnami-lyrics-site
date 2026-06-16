@@ -41,6 +41,8 @@ public final class SongDtos {
      * @param romaji the Romanized romaji lyrics content
      * @param thai the translated Thai lyrics content
      * @param notes optional comments, notes, or explanations for the song or lyrics
+     * @param publishedAt optional timestamp for when the song was originally published (e.g., on YouTube)
+     * @param viewCount optional view count for the song (e.g., from YouTube)
      */
     public record SongUpsertRequest(
             @NotBlank String title,
@@ -56,7 +58,9 @@ public final class SongDtos {
             String kanji,
             String romaji,
             String thai,
-            String notes
+            String notes,
+            LocalDateTime publishedAt,
+            Long viewCount
     ) {
     }
 
@@ -90,6 +94,7 @@ public final class SongDtos {
      * @param createdAt the timestamp when the song entry was created
      * @param updatedAt the timestamp when the song details were last modified
      * @param publishedAt optional timestamp when the song was published
+     * @param viewCount optional view count for the song
      * @param lyrics the detailed lyrics object
      */
     public record SongResponse(
@@ -108,6 +113,7 @@ public final class SongDtos {
             LocalDateTime createdAt,
             LocalDateTime updatedAt,
             LocalDateTime publishedAt,
+            Long viewCount,
             LyricsResponse lyrics
     ) {
     }

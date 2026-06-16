@@ -58,6 +58,15 @@ public class SongCatalogService {
 
     @Transactional
     public SongResponse create(SongUpsertRequest request) {
+        if (hasText(request.youtubeVideoId())) {
+            var existing = songRepository.findByYoutubeVideoId(request.youtubeVideoId());
+            if (existing.isPresent()) {
+                // If it already exists, we might want to update it or just return it.
+                // For sync purposes, returning existing is safer than creating a duplicate.
+                return toResponse(existing.get());
+            }
+        }
+        
         Song song = new Song();
         apply(song, request);
         song.setSlug(uniqueSlug(request.title(), null));
@@ -83,9 +92,14 @@ public class SongCatalogService {
         song.setYoutubeUrl(request.youtubeUrl());
         song.setYoutubeVideoId(hasText(request.youtubeVideoId()) ? request.youtubeVideoId() : extractYoutubeId(request.youtubeUrl()));
         song.setThumbnailUrl(request.thumbnailUrl());
+        song.setViewCount(request.viewCount());
         SongStatus nextStatus = request.status() == null ? SongStatus.DRAFT : request.status();
         song.setStatus(nextStatus);
-        if (nextStatus == SongStatus.PUBLISHED && song.getPublishedAt() == null) {
+        
+        // Handle publishedAt: Prefer request, then existing, then now (if published)
+        if (request.publishedAt() != null) {
+            song.setPublishedAt(request.publishedAt());
+        } else if (nextStatus == SongStatus.PUBLISHED && song.getPublishedAt() == null) {
             song.setPublishedAt(LocalDateTime.now());
         }
 
@@ -148,7 +162,8 @@ public class SongCatalogService {
         return new SongResponse(
                 song.getId(), song.getSlug(), song.getTitle(), song.getTitleJapanese(), song.getArtist(),
                 song.getSourceAnimeOrGame(), song.getYoutubeUrl(), song.getYoutubeVideoId(), song.getThumbnailUrl(),
-                song.getStatus(), tags, moods, song.getCreatedAt(), song.getUpdatedAt(), song.getPublishedAt(), lyricsResponse
+                song.getStatus(), tags, moods, song.getCreatedAt(), song.getUpdatedAt(), song.getPublishedAt(),
+                song.getViewCount(), lyricsResponse
         );
     }
 

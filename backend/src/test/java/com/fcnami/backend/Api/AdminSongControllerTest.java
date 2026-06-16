@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -111,36 +112,34 @@ class AdminSongControllerTest {
                 "漢字",
                 "romaji",
                 "คำแปลไทย",
-                "note"
+                "note",
+                null,
+                0L
         );
     }
 
     private String validRequestJson() {
-        return """
-                {
-                  "title": "Blue Bird",
-                  "titleJapanese": "ブルーバード",
-                  "artist": "Ikimono Gakari",
-                  "sourceAnimeOrGame": "Naruto Shippuden",
-                  "youtubeUrl": "https://youtu.be/KpsJWFuVTdI",
-                  "status": "PUBLISHED",
-                  "tags": ["anime"],
-                  "moods": ["uplifting"],
-                  "kanji": "漢字",
-                  "romaji": "romaji",
-                  "thai": "คำแปลไทย",
-                  "notes": "note"
-                }
-                """;
+        return "{" +
+               "  \"title\": \"Blue Bird\"," +
+               "  \"titleJapanese\": \"ブルーバード\"," +
+               "  \"artist\": \"Ikimono Gakari\"," +
+               "  \"sourceAnimeOrGame\": \"Naruto Shippuden\"," +
+               "  \"youtubeUrl\": \"https://youtu.be/KpsJWFuVTdI\"," +
+               "  \"status\": \"PUBLISHED\"," +
+               "  \"tags\": [\"anime\"]," +
+               "  \"moods\": [\"uplifting\"]," +
+               "  \"kanji\": \"漢字\"," +
+               "  \"romaji\": \"romaji\"," +
+               "  \"thai\": \"คำแปลไทย\"," +
+               "  \"notes\": \"note\"" +
+               "}";
     }
 
     private String invalidRequestJson() {
-        return """
-                {
-                  "title": "",
-                  "artist": ""
-                }
-                """;
+        return "{" +
+               "  \"title\": \"\"," +
+               "  \"artist\": \"\"" +
+               "}";
     }
 
     private SongResponse response() {
@@ -160,6 +159,7 @@ class AdminSongControllerTest {
                 null,
                 null,
                 null,
+                0L,
                 new LyricsResponse("漢字", "romaji", "คำแปลไทย", "note", null)
         );
     }

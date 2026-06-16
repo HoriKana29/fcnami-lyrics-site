@@ -153,6 +153,13 @@ public interface SongRepository extends JpaRepository<Song, Long> {
     List<Song> findByTags_Id(Long tagId);
 
     /**
+     * Precondition: The youtubeVideoId parameter must be a non-null string.
+     * Postcondition: Returns an Optional containing the Song if found, or empty otherwise.
+     * Side-effect: None
+     */
+    Optional<Song> findByYoutubeVideoId(String youtubeVideoId);
+
+    /**
      * Precondition: None
      * Postcondition: Returns the top 10 songs ordered by creation time in descending order.
      * Side-effect: None
