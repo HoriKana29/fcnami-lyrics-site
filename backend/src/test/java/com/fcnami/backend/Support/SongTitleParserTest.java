@@ -36,4 +36,14 @@ class SongTitleParserTest {
         assertEquals("FCNami T_T", result.getArtist());
         assertEquals("Some Source", result.getSource());
     }
+
+    @Test
+    void testExtractTags() {
+        String input = "This is a description with #Anime and #Vocaloid tags.";
+        java.util.Set<String> tags = SongTitleParser.extractTags(input);
+        
+        assertEquals(2, tags.size());
+        assertTrue(tags.contains("Anime"));
+        assertTrue(tags.contains("Vocaloid"));
+    }
 }

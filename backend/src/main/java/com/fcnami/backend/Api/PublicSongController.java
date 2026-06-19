@@ -106,6 +106,14 @@ public class PublicSongController {
      */
     @GetMapping("/{slug}")
     public SongResponse detail(@PathVariable String slug) {
+        if (slug != null && slug.startsWith("yt-")) {
+            String videoId = slug.substring(3);
+            SongResponse dbSong = songCatalogService.findByYoutubeVideoId(videoId);
+            if (dbSong != null) {
+                return dbSong;
+            }
+            return youTubeSyncService.fetchSingleVideoDirect(videoId);
+        }
         return songCatalogService.getBySlug(slug);
     }
 }

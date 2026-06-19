@@ -56,6 +56,13 @@ public class SongCatalogService {
                 .orElseThrow(() -> new EntityNotFoundException("Song not found: " + slug));
     }
 
+    @Transactional(readOnly = true)
+    public SongResponse findByYoutubeVideoId(String videoId) {
+        return songRepository.findByYoutubeVideoId(videoId)
+                .map(this::toResponse)
+                .orElse(null);
+    }
+
     @Transactional
     public SongResponse create(SongUpsertRequest request) {
         if (hasText(request.youtubeVideoId())) {

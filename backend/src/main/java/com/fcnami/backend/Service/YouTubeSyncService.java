@@ -40,6 +40,15 @@ public class YouTubeSyncService {
     @Value("${fcnami.youtube.playlist-id-recommend:PL4wsZBSs9fgMUEGPldykTC5o-dvh561X8}")
     private String playlistIdRecommend;
 
+    @Value("${fcnami.youtube.playlist-id-long-play:PL4wsZBSs9fgNl_NpEHpUbX2_zFyDHCyIR}")
+    private String playlistIdLongPlay;
+
+    @Value("${fcnami.youtube.playlist-id-bandori:PL4wsZBSs9fgPcrdcgxv_0QgcebGyA2Bms}")
+    private String playlistIdBandori;
+
+    @Value("${fcnami.youtube.playlist-id-requested:PL4wsZBSs9fgNUrzogGpFb7bhwzmwnqe-O}")
+    private String playlistIdRequested;
+
     private Map<String, List<SongDtos.SongResponse>> directFetchCacheMap = new HashMap<>();
     private Map<String, LocalDateTime> lastFetchTimeMap = new HashMap<>();
     private static final int CACHE_MINUTES = 5;
@@ -152,10 +161,17 @@ public class YouTubeSyncService {
                     Set<String> tags = new HashSet<>();
                     if (targetPlaylistId.equals(playlistIdRecommend)) {
                         tags.add("recommend");
+                    } else if (targetPlaylistId.equals(playlistIdLongPlay)) {
+                        tags.add("long-play");
+                    } else if (targetPlaylistId.equals(playlistIdBandori)) {
+                        tags.add("bandori");
+                    } else if (targetPlaylistId.equals(playlistIdRequested)) {
+                        tags.add("requested");
                     }
                     if (rawTitle != null) {
                         if (rawTitle.toLowerCase().contains("bandori")) tags.add("bandori");
                         if (rawTitle.toLowerCase().contains("request")) tags.add("requested");
+                        if (rawTitle.toLowerCase().contains("long play") || rawTitle.toLowerCase().contains("long track")) tags.add("long-play");
                     }
 
                     SongTitleParser.ParsedTitle parsed = SongTitleParser.parse(rawTitle);
@@ -300,8 +316,11 @@ public class YouTubeSyncService {
                     }
 
                     Set<String> tags = new HashSet<>();
-                    if (rawTitle != null && rawTitle.toLowerCase().contains("bandori")) tags.add("bandori");
-                    if (rawTitle != null && rawTitle.toLowerCase().contains("request")) tags.add("requested");
+                    if (rawTitle != null) {
+                        if (rawTitle.toLowerCase().contains("bandori")) tags.add("bandori");
+                        if (rawTitle.toLowerCase().contains("request")) tags.add("requested");
+                        if (rawTitle.toLowerCase().contains("long play") || rawTitle.toLowerCase().contains("long track")) tags.add("long-play");
+                    }
                     
                     log.info("Syncing item {}: {} ({})", pageCount, songTitle, videoId);
                     
@@ -414,4 +433,111 @@ public class YouTubeSyncService {
         }
         return count;
     }
+
+    public SongDtos.SongResponse fetchSingleVideoDirect(String videoId) {
+        // First check in cache map
+        for (List<SongDtos.SongResponse> cachedList : directFetchCacheMap.values()) {
+            for (SongDtos.SongResponse song : cachedList) {
+                if (song.youtubeVideoId().equals(videoId)) {
+                    log.info("Returning cached single video details for videoId: {}", videoId);
+                    return song;
+                }
+            }
+        }
+
+        // If not in cache, fetch from YouTube API
+        if (apiKey == null || apiKey.isBlank()) {
+            log.error("YouTube API key is missing. Cannot fetch single video details.");
+            throw new IllegalStateException("YouTube API key is not configured.");
+        }
+
+        try {
+            RestClient restClient = restClientBuilder
+                    .baseUrl(YOUTUBE_API_BASE_URL)
+                    .build();
+
+            log.info("Fetching single video details from YouTube API for videoId: {}...", videoId);
+
+            Map response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/videos")
+                            .queryParam("part", "snippet,statistics")
+                            .queryParam("id", videoId)
+                            .queryParam("key", apiKey)
+                            .build())
+                    .retrieve()
+                    .body(Map.class);
+
+            if (response == null || !response.containsKey("items")) {
+                throw new NoSuchElementException("Video not found on YouTube: " + videoId);
+            }
+
+            List items = (List) response.get("items");
+            if (items == null || items.isEmpty()) {
+                throw new NoSuchElementException("Video not found on YouTube: " + videoId);
+            }
+
+            Map item = (Map) items.get(0);
+            Map snippet = (Map) item.get("snippet");
+            Map statistics = (Map) item.get("statistics");
+
+            String rawTitle = snippet != null ? (String) snippet.get("title") : "Unknown Title";
+            String thumbnailUrl = null;
+            if (snippet != null && snippet.containsKey("thumbnails")) {
+                Map thumbnails = (Map) snippet.get("thumbnails");
+                if (thumbnails != null && thumbnails.containsKey("high")) {
+                    thumbnailUrl = (String) ((Map) thumbnails.get("high")).get("url");
+                }
+            }
+
+            LocalDateTime publishedAt = null;
+            if (snippet != null) {
+                String publishedAtStr = (String) snippet.get("publishedAt");
+                if (publishedAtStr != null) {
+                    try {
+                        publishedAt = OffsetDateTime.parse(publishedAtStr).toLocalDateTime();
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            long viewCount = 0;
+            if (statistics != null && statistics.containsKey("viewCount")) {
+                viewCount = Long.parseLong((String) statistics.get("viewCount"));
+            }
+
+            SongTitleParser.ParsedTitle parsed = SongTitleParser.parse(rawTitle);
+
+            // Create tag set based on title heuristics
+            Set<String> tags = new HashSet<>();
+            if (rawTitle != null) {
+                if (rawTitle.toLowerCase().contains("bandori")) tags.add("bandori");
+                if (rawTitle.toLowerCase().contains("request")) tags.add("requested");
+                if (rawTitle.toLowerCase().contains("long play") || rawTitle.toLowerCase().contains("long track")) tags.add("long-play");
+            }
+
+            return new SongDtos.SongResponse(
+                    0L, 
+                    "yt-" + videoId, 
+                    parsed.getTitle(), 
+                    null, 
+                    parsed.getArtist(),
+                    parsed.getSource(),
+                    "https://youtu.be/" + videoId,
+                    videoId,
+                    thumbnailUrl,
+                    SongStatus.PUBLISHED,
+                    tags,
+                    Collections.emptySet(),
+                    LocalDateTime.now(),
+                    LocalDateTime.now(),
+                    publishedAt,
+                    viewCount,
+                    new SongDtos.LyricsResponse(null, null, null, null, null)
+            );
+        } catch (Exception e) {
+            log.error("Failed to fetch single video direct: {}", e.getMessage(), e);
+            throw new NoSuchElementException("Failed to retrieve video details from YouTube: " + e.getMessage());
+        }
+    }
 }
+

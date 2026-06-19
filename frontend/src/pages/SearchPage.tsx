@@ -10,14 +10,14 @@ type SortMethod = 'newest' | 'oldest' | 'views' | 'title';
 type PlaylistFilter = 'all' | 'long-play' | 'requested' | 'bandori' | 'recommend';
 
 const AVAILABLE_TAGS = [
-  'Anime', 'J-Pop', 'Rhythm Game', 'Vocaloid', 'Uplifting', 'Emotional', 'Rock', 'Study'
+  'Anime', 'AMV', 'Emotional', 'Romantic', 'Cute', 'Depression', 'Uplifting', 'Enjoy', 'Game'
 ];
 
 const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [songs, setSongs] = useState<SongResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [syncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -27,9 +27,12 @@ const SearchPage = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // Configuration for separate playlists
-  const PLAYLIST_IDS = {
+  const PLAYLIST_IDS: Record<PlaylistFilter, string> = {
     all: 'PL4wsZBSs9fgM30xS51w471hbiMvu6_HlW',
-    recommend: 'PL4wsZBSs9fgMUEGPldykTC5o-dvh561X8'
+    recommend: 'PL4wsZBSs9fgMUEGPldykTC5o-dvh561X8',
+    'long-play': 'PL4wsZBSs9fgNl_NpEHpUbX2_zFyDHCyIR',
+    bandori: 'PL4wsZBSs9fgPcrdcgxv_0QgcebGyA2Bms',
+    requested: 'PL4wsZBSs9fgNUrzogGpFb7bhwzmwnqe-O'
   };
 
   const fetchSongs = async (targetFilter: PlaylistFilter, force = false) => {
@@ -41,9 +44,7 @@ const SearchPage = () => {
       setSongs([]);
 
       // Determine which playlist to fetch based on the filter we are MOVING to
-      const targetPlaylistId = targetFilter === 'recommend' 
-        ? PLAYLIST_IDS.recommend 
-        : PLAYLIST_IDS.all;
+      const targetPlaylistId = PLAYLIST_IDS[targetFilter] || PLAYLIST_IDS.all;
 
       logInfo(`Fetching YouTube playlist: ${targetPlaylistId} for filter: ${targetFilter}`);
 
@@ -150,7 +151,7 @@ const SearchPage = () => {
   const updateUrl = (newFilter: PlaylistFilter, newSort: SortMethod) => {
     const params: any = {};
     if (newFilter !== 'all') params.playlist = newFilter;
-    if (newSort === 'views') params.sort = 'views';
+    if (newSort !== 'newest') params.sort = newSort;
     setSearchParams(params);
   };
 
@@ -211,7 +212,6 @@ const SearchPage = () => {
                   value={activeFilter}
                   onChange={(e) => {
                     const val = e.target.value as PlaylistFilter;
-                    setActiveFilter(val);
                     updateUrl(val, activeSort);
                   }}
                 >
@@ -232,7 +232,6 @@ const SearchPage = () => {
                   value={activeSort}
                   onChange={(e) => {
                     const val = e.target.value as SortMethod;
-                    setActiveSort(val);
                     updateUrl(activeFilter, val);
                   }}
                 >
@@ -246,8 +245,6 @@ const SearchPage = () => {
               {(activeFilter !== 'all' || activeSort !== 'newest' || searchTerm || selectedTags.length > 0) && (
                 <button 
                   onClick={() => {
-                    setActiveFilter('all');
-                    setActiveSort('newest');
                     setSearchTerm('');
                     setSelectedTags([]);
                     setSearchParams({});
@@ -259,7 +256,7 @@ const SearchPage = () => {
               )}
 
               <button 
-                onClick={() => fetchSongs(true)}
+                onClick={() => fetchSongs(activeFilter, true)}
                 disabled={loading}
                 className="flex items-center gap-2 border-2 border-[#ff8c00] text-[#ff8c00] font-black text-sm uppercase tracking-widest hover:bg-[#ff8c00] hover:text-white px-4 py-2 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
               >

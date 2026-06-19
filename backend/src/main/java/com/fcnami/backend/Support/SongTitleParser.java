@@ -73,4 +73,27 @@ public class SongTitleParser {
 
         return result;
     }
+
+    /**
+     * Extracts hashtags from a given text block.
+     * 
+     * Precondition: text can be null or any string value.
+     * Postcondition: returns a set of extracted tags (without the '#' symbol).
+     * Side-effect: none.
+     * 
+     * @param text The text block to extract tags from.
+     * @return A set of tags found in the text.
+     */
+    public static java.util.Set<String> extractTags(String text) {
+        if (text == null || text.isBlank()) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.Set<String> tags = new java.util.HashSet<>();
+        Pattern pattern = Pattern.compile("#(\\w+)");
+        Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            tags.add(matcher.group(1));
+        }
+        return tags;
+    }
 }
